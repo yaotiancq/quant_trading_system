@@ -1,0 +1,29 @@
+mode: backtest
+data:
+  data_dir: data/raw
+  source: local
+  timeframe: 1Min
+  timezone: America/Los_Angeles
+  symbols: [SPY]
+  start: "2024-01-02"
+  end: "2024-01-05"
+strategy:
+  name: baseline_ml
+  parameters:
+    model_path: models/baseline_logistic.joblib
+    long_threshold: 0.55
+    short_threshold: 0.45
+    target_notional_fraction: 0.95
+risk:
+  max_gross_exposure: 1.0
+  max_symbol_exposure: 1.0
+  max_position_notional: 95000
+  max_daily_loss: 5000
+  allow_short: true
+backtest:
+  initial_cash: 100000
+  commission_per_share: 0.0
+  slippage_bps: 1.0
+  latency_bars: 1
+  annualization_periods: 252
+  output_dir: reports/ml_backtests
