@@ -30,7 +30,7 @@ def plot_strategy_diagnostics(
     oscillator_panels = oscillator_panels or ["rsi", "macd", "volume"]
     panel_count = 1 + len(oscillator_panels)
     height_ratios = [3.0] + [1.0] * len(oscillator_panels)
-    fig, axes = plt.subplots(panel_count, 1, figsize=(14, 3.2 * panel_count), sharex=True, gridspec_kw={"height_ratios": height_ratios})
+    fig, axes = plt.subplots(panel_count, 1, figsize=(28, 6.4 * panel_count), sharex=True, gridspec_kw={"height_ratios": height_ratios})
     if panel_count == 1:
         axes = [axes]
 
