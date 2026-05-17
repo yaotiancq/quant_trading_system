@@ -15,12 +15,17 @@ risk:
   max_gross_exposure: 0.5
   max_symbol_exposure: 0.25
   max_position_notional: 25000
+  max_order_notional: 10000
+  max_position_quantity: 100
   max_daily_loss: 1000
   allow_short: false
   kill_switch: false
+  trading_session_start: "06:30"
+  trading_session_end: "13:00"
 execution:
   broker: alpaca
   paper: true
   dry_run: true
   live_trading_enabled: false
+  order_confirmation_required: true
   poll_interval_seconds: 5

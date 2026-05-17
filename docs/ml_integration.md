@@ -24,3 +24,5 @@ ML `TradingSignal` objects include `SignalProvenance` with `source_type=ML`, `so
 - Strategy and backtest code receive only history through the current timestamp.
 
 The initial model is intentionally simple. XGBoost, LightGBM, PyTorch, online learning, and reinforcement learning policies can be added behind the same signal interface.
+
+The default feature matrix includes simple returns, log returns, moving-average ratios, rolling volatility, RSI, VWAP deviation, rolling volume statistics, momentum, and intrabar range. Rows are dropped until all rolling features are available.

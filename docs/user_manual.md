@@ -22,8 +22,8 @@ cp .env.example .env
 Edit `.env` only if you need Alpaca data downloads or paper trading:
 
 ```text
-ALPACA_API_KEY_ID=your_key
-ALPACA_API_SECRET_KEY=your_secret
+ALPACA_API_KEY=your_key
+ALPACA_SECRET_KEY=your_secret
 ALPACA_PAPER=true
 ALPACA_DATA_FEED=iex
 ```
@@ -79,6 +79,8 @@ strategy:
 risk:
   max_gross_exposure: 1.0
   max_symbol_exposure: 1.0
+  max_order_notional: 50000
+  max_position_quantity: 1000
   allow_short: true
 backtest:
   initial_cash: 100000
@@ -100,9 +102,19 @@ pytest
 
 Use this after every change to strategy, accounting, data, or ML code.
 
-## 6. Run a Rule-Based Backtest
+## 6. Generate Sample Data
 
-The repository includes a small sample CSV at `data/raw/sample_bars.csv`.
+The default local workflow uses deterministic sample bars:
+
+```bash
+python scripts/generate_sample_data.py
+```
+
+This writes `data/raw/sample_bars.csv` and local Parquet partitions under `data/raw/source=local/`.
+
+## 7. Run a Rule-Based Backtest
+
+The repository includes a deterministic sample CSV at `data/raw/sample_bars.csv`.
 
 ```bash
 python scripts/run_backtest.py --config configs/backtest.yaml
@@ -115,6 +127,7 @@ reports/backtests/equity_curve.csv
 reports/backtests/trades.csv
 reports/backtests/metrics.json
 reports/backtests/run_metadata.json
+reports/backtests/summary.md
 reports/backtests/equity_curve.png
 reports/backtests/SPY_diagnostics.png
 ```
@@ -129,7 +142,7 @@ python scripts/run_backtest.py --config configs/backtest.yaml --no-chart
 
 `<SYMBOL>_diagnostics.png` plots candlestick price action with buy/sell markers, moving averages, VWAP, Bollinger Bands, RSI, MACD, and volume panels. Use it for quick visual inspection before deeper quantitative analysis.
 
-## 6.1. Use a Custom Local Data File
+## 7.1. Use a Custom Local Data File
 
 For fast research, point a config directly at a CSV or Parquet file:
 
@@ -152,7 +165,7 @@ timestamp,symbol,open,high,low,close,volume
 
 Optional columns include `trade_count`, `vwap`, `timeframe`, and `source`. When `data_file` is set, the config `source` and `timeframe` are applied to the loaded rows so provenance remains explicit.
 
-## 7. Download Alpaca Historical Data
+## 8. Download Alpaca Historical Data
 
 Set credentials in `.env`, then edit the `data` section of a config:
 
@@ -181,7 +194,7 @@ data/raw/source=alpaca/timeframe=1Min/symbol=SPY/bars.parquet
 
 For backtesting downloaded data, keep `source: alpaca` in the config so the loader reads from the Alpaca Parquet partition.
 
-## 8. Train the Baseline ML Model
+## 9. Train the Baseline ML Model
 
 The baseline model uses deterministic technical features and a time-based train/test split.
 
@@ -204,7 +217,7 @@ python scripts/train_model.py \
 
 Do not use random train/test splits for market data research unless you have a specific reason and understand the leakage risk.
 
-## 9. Run an ML Backtest
+## 10. Run an ML Backtest
 
 After training a model:
 
@@ -232,19 +245,25 @@ Rule-based and ML signals both use the same `TradingSignal` schema. Each signal 
 
 This provenance is preserved into target positions, order metadata, and backtest trade logs for attribution and risk review.
 
-## 10. Run Paper Trading Connectivity Check
+## 11. Run Paper Trading Dry-Run
 
 Paper trading is intentionally conservative. The default config uses `dry_run: true`.
 
 ```bash
-python scripts/run_paper_trading.py --config configs/paper_trading.yaml --once
+python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-run
 ```
 
-This checks Alpaca account and clock access. It does not run a full autonomous trading loop yet.
+This validates paper-trading configuration without opening an Alpaca connection or submitting orders. To explicitly check Alpaca account and clock access after credentials are configured:
+
+```bash
+python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-run --connect --once
+```
+
+This does not run a full autonomous trading loop yet.
 
 The shared execution helper `qts.execution.plan_orders_from_targets` converts strategy target positions into market order requests from account equity, current positions, and latest prices. The backtest portfolio uses the same helper, which keeps research and future paper/live order planning aligned.
 
-## 11. Create a New Rule-Based Signal
+## 12. Create a New Rule-Based Signal
 
 Add a class in `src/qts/signals/rule_based.py` or a new module. It should implement:
 
@@ -262,7 +281,7 @@ Rules:
 
 Then register it in `create_strategy_from_config` in `src/qts/strategies/signal_strategy.py`.
 
-## 12. Create a New ML Signal
+## 13. Create a New ML Signal
 
 ML models should not submit orders. They should produce predictions that are converted into `TradingSignal` objects.
 
@@ -275,7 +294,7 @@ Typical workflow:
 5. Register the provider in the strategy factory.
 6. Backtest it through the existing engine.
 
-## 13. Interpreting Backtest Output
+## 14. Interpreting Backtest Output
 
 Key files:
 
@@ -303,7 +322,7 @@ The equity curve also includes:
 
 The max daily loss guard resets at the next UTC date in the historical data.
 
-## 14. Charting And Visual Diagnostics
+## 15. Charting And Visual Diagnostics
 
 The reporting layer includes lightweight charting for strategy inspection:
 
@@ -339,7 +358,7 @@ Supported diagnostics:
 
 To add a custom model output or indicator, add it as a column to the bars DataFrame and pass the column name in `oscillator_panels`.
 
-## 15. Common Issues
+## 16. Common Issues
 
 If `pytest` is not found:
 
@@ -371,7 +390,7 @@ python scripts/train_model.py --config configs/backtest.yaml --output models/bas
 
 Then rerun the ML backtest.
 
-## 16. Current Limitations
+## 17. Current Limitations
 
 - Backtest fills are simplified market-order fills at bar close with configurable latency and slippage.
 - Paper trading is a safe connectivity scaffold, not a complete automated trading daemon.

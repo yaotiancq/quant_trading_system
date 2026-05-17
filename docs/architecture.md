@@ -5,11 +5,11 @@ The system is a lightweight research-first trading platform with clean boundarie
 ## Core Flow
 
 1. Configuration is loaded from YAML and environment variables.
-2. Historical bars are loaded from local CSV/Parquet or downloaded from Alpaca.
+2. Historical bars are generated locally, loaded from local CSV/Parquet, or downloaded from Alpaca.
 3. Feature functions produce deterministic reusable columns.
 4. Signal providers produce normalized `TradingSignal` objects.
 5. Strategies convert signals into target portfolio fractions.
-6. Risk checks clip or reject target positions.
+6. Risk checks clip or reject target positions and order intents.
 7. The backtest engine simulates delayed market fills, costs, cash, positions, trades, and equity.
 8. Reports write trades, equity, metrics, and optional charts.
 
@@ -31,4 +31,3 @@ A signal is a signal. Rule-based indicators and ML models both implement the sam
 - Strategies are broker-independent.
 - Risk management is shared between backtest and execution paths.
 - No web dashboard, job scheduler, streaming bus, or heavyweight infrastructure is included in the initial version.
-

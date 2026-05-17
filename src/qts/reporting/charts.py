@@ -137,7 +137,7 @@ def _with_indicators(frame: pd.DataFrame) -> pd.DataFrame:
 
 def _rolling_vwap(frame: pd.DataFrame, window: int = 20) -> pd.Series:
     typical = (frame["high"] + frame["low"] + frame["close"]) / 3
-    volume = frame["volume"].replace(0, pd.NA)
+    volume = frame["volume"].replace(0, float("nan"))
     return (typical * volume).rolling(window).sum() / volume.rolling(window).sum()
 
 
@@ -145,8 +145,12 @@ def _rsi(close: pd.Series, window: int = 14) -> pd.Series:
     delta = close.diff()
     gains = delta.clip(lower=0).rolling(window).mean()
     losses = (-delta.clip(upper=0)).rolling(window).mean()
-    rs = gains / losses.replace(0, pd.NA)
-    return 100 - (100 / (1 + rs))
+    rs = gains / losses.replace(0, float("nan"))
+    rsi = 100 - (100 / (1 + rs))
+    rsi = rsi.mask((losses == 0) & (gains > 0), 100.0)
+    rsi = rsi.mask((gains == 0) & (losses > 0), 0.0)
+    rsi = rsi.mask((gains == 0) & (losses == 0), 50.0)
+    return rsi.astype(float)
 
 
 def _plot_candles(axis, frame: pd.DataFrame, x) -> None:

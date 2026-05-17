@@ -34,6 +34,8 @@ The `history` frame must contain only bars available at or before `timestamp`. P
 
 Strategies consume signals and produce target positions. Backtesting and execution consume strategy outputs, not provider-specific model details.
 
+Implemented providers include moving average crossover, RSI mean reversion, breakout, and the baseline ML provider. `WeightedSignalCombiner` supports equal-weight and confidence-weighted combinations and resolves offsetting LONG/SHORT conflicts to FLAT by default.
+
 Signal provenance is preserved as the signal moves into strategy targets, risk validation, order planning, and backtest trade logs. Order metadata and `trades.csv` include fields such as:
 
 - `signal_source_name`

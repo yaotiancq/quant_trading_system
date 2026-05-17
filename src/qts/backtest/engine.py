@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 from qts.config.models import BacktestConfig
+from qts.backtest.execution import apply_slippage, per_share_commission
 from qts.backtest.metrics import calculate_performance_metrics
 from qts.backtest.portfolio import Portfolio
 from qts.risk.manager import RiskManager
@@ -64,8 +65,8 @@ class BacktestEngine:
                     continue
                 signed_qty = order.quantity if order.side == "buy" else -order.quantity
                 raw_price = latest_prices[order.symbol]
-                fill_price = raw_price * (1 + self.config.slippage_bps / 10_000 * (1 if signed_qty > 0 else -1))
-                commission = abs(order.quantity) * self.config.commission_per_share
+                fill_price = apply_slippage(raw_price, signed_qty, self.config.slippage_bps)
+                commission = per_share_commission(order.quantity, self.config.commission_per_share)
                 opened_index = entry_state.get(order.symbol, (0.0, index))[1]
                 fill = portfolio.apply_fill(order.symbol, signed_qty, fill_price, commission)
                 trade_return = None
@@ -109,7 +110,7 @@ class BacktestEngine:
             if daily_pnl <= -self.risk_manager.config.max_daily_loss:
                 risk_halted = True
 
-            if risk_halted:
+            if risk_halted or self.risk_manager.config.kill_switch:
                 targets = [
                     TargetPosition(timestamp=timestamp.to_pydatetime(), symbol=symbol, target_fraction=0.0)
                     for symbol, position in portfolio.positions.items()
@@ -118,12 +119,19 @@ class BacktestEngine:
             else:
                 history = data[data["timestamp"] <= timestamp]
                 targets = self.risk_manager.validate_targets(self.strategy.generate_targets(history, timestamp))
+            pending_quantities: dict[str, float] = {}
+            for _, pending_order in pending_orders:
+                signed = pending_order.quantity if pending_order.side == "buy" else -pending_order.quantity
+                pending_quantities[pending_order.symbol] = pending_quantities.get(pending_order.symbol, 0.0) + signed
+
             orders = portfolio.orders_for_targets(
                 targets,
                 latest_prices,
                 timestamp,
                 max_position_notional=self.risk_manager.config.max_position_notional,
+                pending_quantities=pending_quantities,
             )
+            orders = self.risk_manager.validate_orders(orders, latest_prices, timestamp)
             pending_orders.extend((index + max(self.config.latency_bars, 0), order) for order in orders)
 
             equity = portfolio.equity(latest_prices)

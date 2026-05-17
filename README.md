@@ -8,17 +8,18 @@ The system is designed for fast strategy iteration, repeatable backtests, local 
 
 - YAML configuration loading with environment-based Alpaca credentials.
 - Local CSV and Parquet market data loading.
+- Deterministic sample data generation.
 - Configurable loaded-data timezone, defaulting to Pacific Time.
 - Alpaca historical data downloader.
 - Deterministic feature engineering.
 - Unified signal interface for rule-based and ML signals.
-- Moving average crossover and RSI rule-based signals.
+- Moving average crossover, RSI mean reversion, and breakout rule-based signals.
 - Baseline logistic regression ML model and ML signal provider.
 - Strategy interface that converts signals into target positions.
 - Bar-by-bar backtest engine with latency, slippage, commissions, cash, positions, trades, equity, and metrics.
 - Alpaca broker adapter for paper trading and future guarded live trading.
 - Lightweight reporting to CSV, JSON, and optional equity chart.
-- Tests for config, data loading, signals, and backtest behavior.
+- Tests for config, data loading, validation, features, signals, risk, metrics, order planning, charts, and backtest behavior.
 
 For detailed operating instructions, see [docs/user_manual.md](docs/user_manual.md).
 
@@ -37,6 +38,14 @@ cp .env.example .env
 
 Fill `.env` with Alpaca credentials only when using Alpaca data or paper trading.
 
+## Generate Sample Data
+
+```bash
+python scripts/generate_sample_data.py
+```
+
+This writes deterministic local bars to `data/raw/sample_bars.csv` and partitioned Parquet under `data/raw/source=local/`. No Alpaca credentials are required.
+
 ## Run Tests
 
 ```bash
@@ -50,12 +59,12 @@ python scripts/run_backtest.py --config configs/backtest.yaml
 ```
 
 Outputs are written to `reports/backtests/`.
-Each report also includes `run_metadata.json` with the config snapshot and input data summary.
+Each report also includes `summary.md` and `run_metadata.json` with the config snapshot and input data summary.
 When charting is enabled, reports include `equity_curve.png` and `<SYMBOL>_diagnostics.png` with price action, indicators, volume, and buy/sell markers.
 
 ## Download Alpaca Historical Data
 
-Set `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY` in `.env`, update `configs/backtest.yaml`, then run:
+Set `ALPACA_API_KEY` and `ALPACA_SECRET_KEY` in `.env`, update `configs/backtest.yaml`, then run:
 
 ```bash
 python scripts/download_data.py --config configs/backtest.yaml
@@ -82,10 +91,10 @@ ML signals flow through the same `SignalDrivenStrategy`, risk manager, and backt
 ## Run Paper Trading Dry-Run
 
 ```bash
-python scripts/run_paper_trading.py --config configs/paper_trading.yaml --once
+python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-run
 ```
 
-The default paper config is `dry_run: true`. This entry point checks Alpaca connectivity and account state. Strategy-to-order submission can be extended without changing the strategy interface.
+The default paper config is `dry_run: true`. The command above validates configuration without opening an Alpaca connection or submitting orders. Use `--connect --once` when credentials are configured and you explicitly want to check Alpaca account/clock connectivity.
 
 ## Repository Structure
 
@@ -101,7 +110,7 @@ tests/                   Pytest suite
 
 ## Known Limitations
 
-- The paper trading loop is a safe connectivity scaffold, not a full autonomous trading loop yet.
+- The paper trading loop is a safe dry-run/connectivity scaffold, not a full autonomous trading loop yet.
 - Live trading is blocked unless explicitly enabled and should receive additional operational review.
 - The first backtest engine supports market-order simulation, simple slippage, simple commissions, and bar-based latency.
 - Second-level bars are supported by the data model and event loop when data is available. The current Alpaca stock-bar adapter supports SDK-exposed bar intervals; second-level Alpaca data should be added through local normalized bars or a future trade/quote aggregation adapter.

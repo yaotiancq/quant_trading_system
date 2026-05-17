@@ -12,7 +12,8 @@ The backtest engine is bar-by-bar and event-driven enough for lightweight resear
 - Tracks cash, positions, market value, and equity.
 - Generates target positions from strategy logic using only current and past data.
 - Converts targets into orders through the shared execution order planner.
-- Applies risk constraints before creating orders.
+- Applies target and order risk constraints before creating simulated orders.
+- Accounts for pending delayed orders when planning new target deltas.
 - Halts new entries and targets open positions flat when `max_daily_loss` is breached for the current session.
 - Produces trade logs, equity curves, and metrics.
 - Produces diagnostic charts when charting is enabled in the CLI.
@@ -44,3 +45,5 @@ The symbol diagnostics chart includes candlestick-style OHLC price action, buy/s
 ## Assumptions
 
 Market orders fill at the next eligible bar close adjusted for slippage. `latency_bars` must be at least `1`, because strategy signals are generated after the current bar is available. Partial fills, queue position, borrow availability, corporate actions, and exchange-specific microstructure are not modeled in the initial version.
+
+The engine supports minute and second bars when normalized data is available. This is intraday research infrastructure, not high-frequency trading infrastructure.

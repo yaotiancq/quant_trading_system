@@ -6,7 +6,7 @@ from qts.config.models import StrategyConfig
 from qts.ml.model import BaselineModel
 from qts.ml.signal_provider import MLSignalProvider
 from qts.signals.base import SignalDirection, SignalProvider
-from qts.signals.rule_based import MovingAverageCrossoverSignal, RsiMeanReversionSignal
+from qts.signals.rule_based import BreakoutSignal, MovingAverageCrossoverSignal, RsiMeanReversionSignal
 from qts.strategies.base import TargetPosition
 
 
@@ -44,6 +44,8 @@ def create_strategy_from_config(config: StrategyConfig) -> SignalDrivenStrategy:
         return SignalDrivenStrategy(config.name, MovingAverageCrossoverSignal(**params))
     if config.name == "rsi_mean_reversion":
         return SignalDrivenStrategy(config.name, RsiMeanReversionSignal(**params))
+    if config.name == "breakout":
+        return SignalDrivenStrategy(config.name, BreakoutSignal(**params))
     if config.name == "baseline_ml":
         model_path = params.pop("model_path", None)
         if not model_path:

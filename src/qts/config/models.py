@@ -49,9 +49,13 @@ class RiskConfig(BaseModel):
     max_gross_exposure: float = Field(default=1.0, gt=0)
     max_symbol_exposure: float = Field(default=1.0, gt=0)
     max_position_notional: float = Field(default=100_000.0, gt=0)
+    max_order_notional: float = Field(default=100_000.0, gt=0)
+    max_position_quantity: float = Field(default=10_000.0, gt=0)
     max_daily_loss: float = Field(default=5_000.0, gt=0)
     allow_short: bool = True
     kill_switch: bool = False
+    trading_session_start: str | None = None
+    trading_session_end: str | None = None
 
 
 class BacktestConfig(BaseModel):
@@ -68,6 +72,7 @@ class ExecutionConfig(BaseModel):
     paper: bool = True
     dry_run: bool = True
     live_trading_enabled: bool = False
+    order_confirmation_required: bool = True
     poll_interval_seconds: int = Field(default=5, gt=0)
 
 

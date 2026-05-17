@@ -49,8 +49,11 @@ class Portfolio:
         prices: dict[str, float],
         timestamp: pd.Timestamp,
         max_position_notional: float,
+        pending_quantities: dict[str, float] | None = None,
     ) -> list[OrderRequest]:
         current_quantities = {symbol: position.quantity for symbol, position in self.positions.items()}
+        for symbol, quantity in (pending_quantities or {}).items():
+            current_quantities[symbol] = current_quantities.get(symbol, 0.0) + quantity
         return plan_orders_from_targets(
             targets=targets,
             equity=self.equity(prices),

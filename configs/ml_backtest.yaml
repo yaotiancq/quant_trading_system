@@ -1,12 +1,13 @@
 mode: backtest
 data:
   data_dir: data/raw
+  data_file: data/raw/sample_bars.csv
   source: local
   timeframe: 1Min
   timezone: America/Los_Angeles
   symbols: [SPY]
-  start: "2024-01-02"
-  end: "2024-01-05"
+  start: "2024-01-02T14:30:00Z"
+  end: "2024-01-03T21:00:00Z"
 strategy:
   name: baseline_ml
   parameters:
@@ -18,8 +19,13 @@ risk:
   max_gross_exposure: 1.0
   max_symbol_exposure: 1.0
   max_position_notional: 95000
+  max_order_notional: 50000
+  max_position_quantity: 1000
   max_daily_loss: 5000
   allow_short: true
+  kill_switch: false
+  trading_session_start: "06:30"
+  trading_session_end: "13:00"
 backtest:
   initial_cash: 100000
   commission_per_share: 0.0

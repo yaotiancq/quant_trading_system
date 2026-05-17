@@ -34,6 +34,7 @@ def normalize_market_data(
     result["timeframe"] = result.get("timeframe", timeframe)
     result["source"] = result.get("source", source)
     result = result.dropna(subset=["timestamp", "symbol", "open", "high", "low", "close", "volume"])
+    validate_market_data(result)
     result = result[MARKET_DATA_COLUMNS].sort_values(["timestamp", "symbol"]).reset_index(drop=True)
     return result
 
@@ -43,3 +44,17 @@ def parse_timestamp_bound(value: str, timezone: str) -> pd.Timestamp:
     if timestamp.tzinfo is None:
         return timestamp.tz_localize(timezone)
     return timestamp.tz_convert(timezone)
+
+
+def validate_market_data(df: pd.DataFrame) -> None:
+    missing = [column for column in ["timestamp", "symbol", "open", "high", "low", "close", "volume"] if column not in df.columns]
+    if missing:
+        raise ValueError(f"Market data is missing required columns: {missing}")
+    if (df["volume"] < 0).any():
+        raise ValueError("Market data volume must be non-negative.")
+    high_floor = df[["open", "close"]].max(axis=1)
+    low_ceiling = df[["open", "close"]].min(axis=1)
+    if (df["high"] < high_floor).any():
+        raise ValueError("Market data high must be at least max(open, close).")
+    if (df["low"] > low_ceiling).any():
+        raise ValueError("Market data low must be at most min(open, close).")

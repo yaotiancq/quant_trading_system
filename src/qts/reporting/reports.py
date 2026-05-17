@@ -26,6 +26,7 @@ def write_backtest_report(
     if metadata is not None:
         with (path / "run_metadata.json").open("w", encoding="utf-8") as fh:
             json.dump(metadata, fh, indent=2)
+    _write_summary_markdown(path, result, metadata)
     if not make_chart or result.equity_curve.empty:
         return
     os.environ.setdefault("MPLCONFIGDIR", str(Path("/tmp/qts_matplotlib").resolve()))
@@ -67,3 +68,38 @@ def build_run_metadata(config: AppConfig, data: pd.DataFrame, run_type: str) -> 
         "config": config.model_dump(mode="json"),
         "data": data_summary,
     }
+
+
+def _write_summary_markdown(path: Path, result: BacktestResult, metadata: dict[str, object] | None) -> None:
+    run_type = str(metadata.get("run_type", "backtest")) if metadata else "backtest"
+    data = metadata.get("data", {}) if metadata else {}
+    lines = [
+        f"# {run_type.replace('_', ' ').title()} Summary",
+        "",
+        "This report is a simulated research/backtest output. It is not a live trading result and does not prove future profitability.",
+        "",
+        "## Data",
+        "",
+        f"- Rows: {data.get('rows', 'unknown') if isinstance(data, dict) else 'unknown'}",
+        f"- Symbols: {data.get('symbols', 'unknown') if isinstance(data, dict) else 'unknown'}",
+        f"- Start: {data.get('start', 'unknown') if isinstance(data, dict) else 'unknown'}",
+        f"- End: {data.get('end', 'unknown') if isinstance(data, dict) else 'unknown'}",
+        "",
+        "## Metrics",
+        "",
+    ]
+    for key, value in result.metrics.items():
+        lines.append(f"- {key}: {value}")
+    lines.extend(
+        [
+            "",
+            "## Artifacts",
+            "",
+            "- equity_curve.csv",
+            "- trades.csv",
+            "- metrics.json",
+            "- run_metadata.json",
+        ]
+    )
+    with (path / "summary.md").open("w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")

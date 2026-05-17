@@ -1,8 +1,12 @@
 from pathlib import Path
 
+import pandas as pd
+import pytest
+
 from qts.config.models import DataConfig
 from qts.data.loader import load_market_data
 from qts.data.storage import ParquetDataStore
+from qts.data.validation import normalize_market_data
 
 
 def test_load_sample_market_data() -> None:
@@ -48,3 +52,20 @@ def test_load_market_data_from_configured_csv(tmp_path) -> None:
     assert data["symbol"].unique().tolist() == ["SPY"]
     assert data["source"].unique().tolist() == ["custom"]
     assert data["timestamp"].iloc[0].hour == 6
+
+
+def test_market_data_validation_rejects_bad_high_low() -> None:
+    rows = [
+        {
+            "timestamp": pd.Timestamp("2024-01-02T14:30:00Z"),
+            "symbol": "SPY",
+            "open": 100,
+            "high": 99,
+            "low": 98,
+            "close": 101,
+            "volume": 1000,
+        }
+    ]
+
+    with pytest.raises(ValueError, match="high"):
+        normalize_market_data(pd.DataFrame(rows))
