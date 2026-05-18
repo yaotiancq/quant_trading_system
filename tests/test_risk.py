@@ -46,3 +46,19 @@ def test_risk_manager_respects_session_filter() -> None:
 
     assert manager.is_trading_session_open(pd.Timestamp("2024-01-02T06:30:00"))
     assert not manager.is_trading_session_open(pd.Timestamp("2024-01-02T15:00:00"))
+
+
+def test_risk_manager_rejects_unsupported_order_type_tif_combo() -> None:
+    timestamp = pd.Timestamp("2024-01-02T14:30:00Z")
+    manager = RiskManager(RiskConfig())
+    order = OrderRequest(
+        timestamp.to_pydatetime(),
+        "SPY",
+        "buy",
+        10,
+        order_type="stop",
+        time_in_force="ioc",
+        stop_price=101,
+    )
+
+    assert manager.validate_orders([order], {"SPY": 100.0}, timestamp) == []

@@ -10,6 +10,8 @@
 - Moving average, RSI, breakout, ML, and combined signals.
 - Signal-driven strategy wrapper.
 - Bar-by-bar backtest engine with cash, positions, realized/unrealized PnL, latency, slippage, commissions, trade logs, equity curves, and metrics.
+- OHLCV order execution simulator for market, limit, stop, stop-limit, and trailing-stop orders.
+- Configurable market fill prices, intrabar path assumptions, and partial fills.
 - Shared order planner and risk manager.
 - Alpaca historical downloader and isolated broker adapter.
 - Safe paper-trading dry-run command.

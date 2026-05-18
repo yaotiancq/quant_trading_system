@@ -131,3 +131,26 @@ def test_plan_orders_preserves_signal_provenance_metadata() -> None:
     assert orders[0].metadata["signal_feature_set"] == ["return_1", "ma_ratio_5_20"]
     assert orders[0].metadata["signal_confidence"] == 0.9
     assert orders[0].metadata["signal_confidence_metadata"]["probability_up"] == 0.9
+
+
+def test_plan_orders_supports_limit_order_offsets() -> None:
+    timestamp = pd.Timestamp("2024-01-02T14:30:00Z")
+    target = TargetPosition(
+        timestamp=timestamp.to_pydatetime(),
+        symbol="SPY",
+        target_fraction=0.5,
+        metadata={"order_type": "limit", "time_in_force": "gtc", "limit_price_offset_bps": 10},
+    )
+
+    orders = plan_orders_from_targets(
+        targets=[target],
+        equity=10_000,
+        current_quantities={},
+        latest_prices={"SPY": 100},
+        timestamp=timestamp,
+        max_position_notional=10_000,
+    )
+
+    assert orders[0].order_type == "limit"
+    assert orders[0].time_in_force == "gtc"
+    assert orders[0].limit_price == 99.9

@@ -75,3 +75,44 @@ def test_backtest_daily_loss_guard_flattens_positions() -> None:
 
     assert result.equity_curve["risk_halted"].any()
     assert result.trades.iloc[-1]["position_after"] == 0.0
+
+
+def test_backtest_market_order_fills_on_next_bar_open() -> None:
+    class AlwaysLongStrategy:
+        name = "always_long"
+
+        def generate_targets(self, history: pd.DataFrame, timestamp: pd.Timestamp) -> list[TargetPosition]:
+            return [TargetPosition(timestamp=timestamp.to_pydatetime(), symbol="SPY", target_fraction=0.5)]
+
+    rows = [
+        {
+            "timestamp": pd.Timestamp("2024-01-02T14:30:00Z"),
+            "symbol": "SPY",
+            "open": 100.0,
+            "high": 101.0,
+            "low": 99.0,
+            "close": 100.0,
+            "volume": 10_000,
+        },
+        {
+            "timestamp": pd.Timestamp("2024-01-02T14:31:00Z"),
+            "symbol": "SPY",
+            "open": 105.0,
+            "high": 121.0,
+            "low": 104.0,
+            "close": 120.0,
+            "volume": 10_000,
+        },
+    ]
+    data = normalize_market_data(pd.DataFrame(rows))
+    engine = BacktestEngine(
+        BacktestConfig(initial_cash=10_000, latency_bars=1, market_fill_price="open"),
+        AlwaysLongStrategy(),
+        RiskManager(RiskConfig(max_position_notional=10_000)),
+    )
+
+    result = engine.run(data)
+
+    assert result.trades.iloc[0]["raw_fill_price"] == 105.0
+    assert result.trades.iloc[0]["fill_bar_open"] == 105.0
+    assert result.trades.iloc[0]["fill_bar_close"] == 120.0

@@ -14,3 +14,15 @@
 - Added compatibility modules matching the documented project structure.
 - Added tests for features, metrics, risk, signal combination, and data validation.
 - Added risk management and CLI documentation plus continuity files.
+
+## 2026-05-17 Backtest Execution Simulation Update
+
+- Replaced close-price-only fill simulation with an OHLCV bar execution simulator.
+- Added support for `market`, `limit`, `stop`, `stop_limit`, and `trailing_stop` order simulation.
+- Added support for `day`, `gtc`, `opg`, `cls`, `ioc`, and `fok` time-in-force assumptions.
+- Added configurable market fill price models: `open`, `close`, `hlc3`, `ohlc4`, and `vwap`.
+- Added configurable limit, stop, intrabar path, partial-fill, and max bar volume assumptions.
+- Added order fields to `OrderRequest` and Alpaca broker submission mapping for supported order types.
+- Added order defaults in strategy config and dynamic limit/stop basis-point offsets.
+- Expanded `trades.csv` with raw fill price, fill reason, order fields, remaining quantity, and fill bar OHLCV.
+- Added execution simulator tests and next-bar-open backtest coverage.

@@ -76,6 +76,8 @@ strategy:
   parameters:
     fast_window: 5
     slow_window: 20
+    order_type: market
+    time_in_force: day
 risk:
   max_gross_exposure: 1.0
   max_symbol_exposure: 1.0
@@ -86,11 +88,19 @@ backtest:
   initial_cash: 100000
   slippage_bps: 1.0
   latency_bars: 1
+  market_fill_price: open
+  limit_fill_price: limit
+  stop_fill_price: stop
+  intrabar_price_path: open_high_low_close
+  max_fill_volume_pct: 0.1
+  allow_partial_fills: true
 ```
 
 Important assumptions such as slippage, commissions, latency, exposure limits, and starting cash should be changed in config rather than hard-coded into strategies.
 
 `latency_bars` must be at least `1`. The engine assumes signals are generated after the current bar is known and orders fill no earlier than a later bar. This avoids same-bar close-to-close look-ahead behavior.
+
+The default market-order simulation fills at the next eligible bar open, not the signal bar close. You can change `market_fill_price` to `close`, `hlc3`, `ohlc4`, or `vwap` for sensitivity analysis.
 
 Loaded timestamps default to Pacific Time through `timezone: America/Los_Angeles`. The aliases `PT`, `PST`, and `PDT` are accepted and normalized to `America/Los_Angeles`. Raw timestamps with an explicit timezone, such as `Z`/UTC Alpaca timestamps, are converted to the configured timezone. Naive timestamps are treated the same way pandas treats them during UTC normalization, so prefer timezone-aware raw data.
 
@@ -322,6 +332,36 @@ The equity curve also includes:
 
 The max daily loss guard resets at the next UTC date in the historical data.
 
+### Order Simulation Fields
+
+`trades.csv` includes execution simulation details:
+
+- `order_type` and `time_in_force`
+- `requested_quantity`, `quantity`, and `remaining_quantity`
+- `limit_price`, `stop_price`, `trail_price`, and `trail_percent`
+- `raw_fill_price`, before slippage
+- `fill_price`, after slippage
+- `fill_reason`
+- `fill_bar_open`, `fill_bar_high`, `fill_bar_low`, `fill_bar_close`, `fill_bar_vwap`, and `fill_bar_volume`
+
+Supported order types are `market`, `limit`, `stop`, `stop_limit`, and `trailing_stop`. Supported time-in-force values are `day`, `gtc`, `opg`, `cls`, `ioc`, and `fok`.
+
+To experiment with a limit order generated from the signal bar close:
+
+```yaml
+strategy:
+  name: moving_average_crossover
+  parameters:
+    fast_window: 5
+    slow_window: 20
+    target_notional_fraction: 0.5
+    order_type: limit
+    time_in_force: day
+    limit_price_offset_bps: 5
+```
+
+For a buy order, `limit_price_offset_bps: 5` places the limit 5 basis points below the reference close. For a sell order, it places the limit 5 basis points above the reference close. Stop offsets work in the opposite direction.
+
 ## 15. Charting And Visual Diagnostics
 
 The reporting layer includes lightweight charting for strategy inspection:
@@ -392,7 +432,7 @@ Then rerun the ML backtest.
 
 ## 17. Current Limitations
 
-- Backtest fills are simplified market-order fills at bar close with configurable latency and slippage.
+- Backtest fills are OHLCV bar simulations with configurable latency, slippage, order-type behavior, and partial-fill assumptions.
 - Paper trading is a safe connectivity scaffold, not a complete automated trading daemon.
 - Live trading is intentionally disabled and requires additional controls.
 - Second-level local bars are supported by the model and engine, but the current Alpaca stock-bar adapter depends on SDK-supported bar intervals.

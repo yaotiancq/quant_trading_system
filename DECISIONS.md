@@ -18,8 +18,10 @@ Date: 2026-05-17
 ## Backtest Assumptions
 
 - Signals are generated after the current bar is known.
-- Market orders fill no earlier than a later bar based on `latency_bars`.
-- Fills use the eligible bar close adjusted by basis-point slippage and per-share commission.
+- Orders fill no earlier than a later bar based on `latency_bars`.
+- Market orders default to the next eligible bar open, with configurable alternatives such as close, HLC3, OHLC4, and VWAP.
+- Limit, stop, stop-limit, and trailing-stop orders are simulated from OHLCV bars using explicit touch/trigger assumptions.
+- Fills use the selected raw fill price adjusted by basis-point slippage and per-share commission.
 - Pending delayed orders are counted when planning new target deltas.
 - Backtest results are simulations and are not evidence of future profitability.
 

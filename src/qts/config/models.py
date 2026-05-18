@@ -65,6 +65,12 @@ class BacktestConfig(BaseModel):
     latency_bars: int = Field(default=1, ge=1)
     annualization_periods: int = Field(default=252, gt=0)
     output_dir: Path = Path("reports/backtests")
+    market_fill_price: Literal["open", "close", "hlc3", "ohlc4", "vwap"] = "open"
+    limit_fill_price: Literal["limit", "touch", "midpoint"] = "limit"
+    stop_fill_price: Literal["stop", "market"] = "stop"
+    intrabar_price_path: Literal["open_high_low_close", "open_low_high_close"] = "open_high_low_close"
+    max_fill_volume_pct: float = Field(default=1.0, gt=0, le=1.0)
+    allow_partial_fills: bool = True
 
 
 class ExecutionConfig(BaseModel):

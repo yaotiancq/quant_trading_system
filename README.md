@@ -112,6 +112,6 @@ tests/                   Pytest suite
 
 - The paper trading loop is a safe dry-run/connectivity scaffold, not a full autonomous trading loop yet.
 - Live trading is blocked unless explicitly enabled and should receive additional operational review.
-- The first backtest engine supports market-order simulation, simple slippage, simple commissions, and bar-based latency.
+- The backtest engine uses OHLCV bar execution assumptions for supported order types, but it still does not model queue position, spread dynamics, borrow availability, or full market microstructure.
 - Second-level bars are supported by the data model and event loop when data is available. The current Alpaca stock-bar adapter supports SDK-exposed bar intervals; second-level Alpaca data should be added through local normalized bars or a future trade/quote aggregation adapter.
 - The ML baseline is intentionally simple and should be treated as an example workflow, not a production model.

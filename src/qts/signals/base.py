@@ -8,6 +8,7 @@ from numbers import Integral, Real
 from typing import Protocol
 
 import pandas as pd
+import numpy as np
 
 
 class SignalDirection(str, Enum):
@@ -77,6 +78,8 @@ class SignalProvider(Protocol):
 
 
 def _json_safe(value: object) -> object:
+    if isinstance(value, np.generic):
+        return value.item()
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, datetime):

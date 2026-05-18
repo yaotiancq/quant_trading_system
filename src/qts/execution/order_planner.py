@@ -5,6 +5,7 @@ from datetime import datetime
 from enum import Enum
 
 import pandas as pd
+import numpy as np
 
 from qts.signals.base import TradingSignal
 from qts.strategies.base import OrderRequest, TargetPosition
@@ -41,12 +42,28 @@ def plan_orders_from_targets(
         if abs(delta_quantity) <= min_quantity:
             continue
 
+        side = "buy" if delta_quantity > 0 else "sell"
+        limit_price = _optional_float(target.metadata.get("limit_price"))
+        stop_price = _optional_float(target.metadata.get("stop_price"))
+        if limit_price is None:
+            limit_price = _offset_price(target.metadata.get("limit_price_offset_bps"), price, side, price_type="limit")
+        if stop_price is None:
+            stop_price = _offset_price(target.metadata.get("stop_price_offset_bps"), price, side, price_type="stop")
+
         orders.append(
             OrderRequest(
                 timestamp=order_timestamp,
                 symbol=symbol,
-                side="buy" if delta_quantity > 0 else "sell",
+                side=side,
                 quantity=abs(delta_quantity),
+                order_type=str(target.metadata.get("order_type", "market")),
+                time_in_force=str(target.metadata.get("time_in_force", "day")),
+                limit_price=limit_price,
+                stop_price=stop_price,
+                trail_price=_optional_float(target.metadata.get("trail_price")),
+                trail_percent=_optional_float(target.metadata.get("trail_percent")),
+                extended_hours=bool(target.metadata.get("extended_hours", False)),
+                order_class=str(target.metadata["order_class"]) if target.metadata.get("order_class") else None,
                 metadata={
                     "target_fraction": target.target_fraction,
                     "target_notional": capped_notional,
@@ -114,7 +131,26 @@ def _signal_order_metadata(metadata: Mapping[str, object]) -> dict[str, object]:
     return result
 
 
+def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    return float(value)
+
+
+def _offset_price(value: object, reference_price: float, side: str, price_type: str) -> float | None:
+    if value is None:
+        return None
+    offset = float(value) / 10_000
+    if price_type == "limit":
+        multiplier = 1 - offset if side == "buy" else 1 + offset
+    else:
+        multiplier = 1 + offset if side == "buy" else 1 - offset
+    return reference_price * multiplier
+
+
 def _json_safe(value: object) -> object:
+    if isinstance(value, np.generic):
+        return value.item()
     if isinstance(value, TradingSignal):
         return value.to_dict()
     if isinstance(value, Enum):

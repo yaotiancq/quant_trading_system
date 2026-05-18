@@ -42,6 +42,18 @@ python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-ru
 
 The broker adapter supports account, positions, clock, submit order, cancel order, and order status. Dry-run mode never submits orders.
 
+The broker-neutral `OrderRequest` model and Alpaca adapter support the installed Alpaca SDK order types:
+
+- `market`
+- `limit`
+- `stop`
+- `stop_limit`
+- `trailing_stop`
+
+Supported time-in-force values are `day`, `gtc`, `opg`, `cls`, `ioc`, and `fok`. Bracket/OCO/OTO order classes are represented on the request model for adapter compatibility, but full multi-leg backtest simulation is future work.
+
+For equity backtests, the risk layer rejects unsupported combinations such as stop orders with `ioc`, or extended-hours market orders. Extended-hours simulation currently allows only limit orders with `day` or `gtc`, matching Alpaca's documented constraint.
+
 The execution layer also provides `qts.execution.plan_orders_from_targets`, which converts broker-independent strategy target positions into market order requests using account equity, current quantities, latest prices, and max-position limits. The backtest portfolio uses this same planner, so target-to-order behavior stays aligned between research and future paper/live execution.
 
 ## Live Trading Readiness

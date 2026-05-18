@@ -36,6 +36,8 @@ Strategies consume signals and produce target positions. Backtesting and executi
 
 Implemented providers include moving average crossover, RSI mean reversion, breakout, and the baseline ML provider. `WeightedSignalCombiner` supports equal-weight and confidence-weighted combinations and resolves offsetting LONG/SHORT conflicts to FLAT by default.
 
+Order behavior is intentionally separate from signal behavior. Strategy config can attach broker-neutral order defaults such as `order_type`, `time_in_force`, `limit_price_offset_bps`, or `stop_price_offset_bps` to generated target positions. The order planner converts those targets into `OrderRequest` objects, and the backtest or broker adapter handles execution.
+
 Signal provenance is preserved as the signal moves into strategy targets, risk validation, order planning, and backtest trade logs. Order metadata and `trades.csv` include fields such as:
 
 - `signal_source_name`

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pandas as pd
 
 from qts.config.models import BacktestConfig
-from qts.backtest.execution import apply_slippage, per_share_commission
+from qts.backtest.execution import BarExecutionSimulator
 from qts.backtest.metrics import calculate_performance_metrics
 from qts.backtest.portfolio import Portfolio
 from qts.risk.manager import RiskManager
@@ -27,6 +27,14 @@ class BacktestResult:
         pd.Series(self.metrics).to_json(path / "metrics.json", indent=2)
 
 
+@dataclass(frozen=True)
+class PendingOrder:
+    ready_index: int
+    order: OrderRequest
+    trail_hwm: float | None = None
+    attempts: int = 0
+
+
 class BacktestEngine:
     def __init__(self, config: BacktestConfig, strategy: Strategy, risk_manager: RiskManager) -> None:
         self.config = config
@@ -38,7 +46,8 @@ class BacktestEngine:
         if data.empty:
             raise ValueError("Backtest data is empty.")
         portfolio = Portfolio(self.config.initial_cash)
-        pending_orders: list[tuple[int, OrderRequest]] = []
+        execution = BarExecutionSimulator(self.config)
+        pending_orders: list[PendingOrder] = []
         equity_rows: list[dict[str, object]] = []
         trade_rows: list[dict[str, object]] = []
         entry_state: dict[str, tuple[float, int]] = {}
@@ -58,15 +67,34 @@ class BacktestEngine:
             current = data[data["timestamp"] == timestamp]
             latest_prices.update(dict(zip(current["symbol"], current["close"])))
 
-            ready = [item for item in pending_orders if item[0] <= index]
-            pending_orders = [item for item in pending_orders if item[0] > index]
-            for _, order in ready:
-                if order.symbol not in latest_prices:
+            still_pending: list[PendingOrder] = [item for item in pending_orders if item.ready_index > index]
+            ready = [item for item in pending_orders if item.ready_index <= index]
+            current_by_symbol = {str(row["symbol"]).upper(): row for _, row in current.iterrows()}
+            for pending in ready:
+                order = pending.order
+                if execution.is_expired(order, pd.Timestamp(timestamp)):
                     continue
-                signed_qty = order.quantity if order.side == "buy" else -order.quantity
-                raw_price = latest_prices[order.symbol]
-                fill_price = apply_slippage(raw_price, signed_qty, self.config.slippage_bps)
-                commission = per_share_commission(order.quantity, self.config.commission_per_share)
+                bar = current_by_symbol.get(order.symbol.upper())
+                if bar is None:
+                    still_pending.append(replace(pending, ready_index=index + 1, attempts=pending.attempts + 1))
+                    continue
+
+                simulated = execution.simulate(order, bar, trail_hwm=pending.trail_hwm)
+                if not simulated.has_fill:
+                    if order.time_in_force not in {"ioc", "fok", "opg", "cls"} and simulated.status != "cancelled":
+                        still_pending.append(
+                            PendingOrder(
+                                ready_index=index + 1,
+                                order=order,
+                                trail_hwm=simulated.trail_hwm,
+                                attempts=pending.attempts + 1,
+                            )
+                        )
+                    continue
+
+                signed_qty = simulated.filled_quantity if order.side == "buy" else -simulated.filled_quantity
+                fill_price = execution.apply_slippage(simulated.fill_price, signed_qty)
+                commission = execution.commission(simulated.filled_quantity)
                 opened_index = entry_state.get(order.symbol, (0.0, index))[1]
                 fill = portfolio.apply_fill(order.symbol, signed_qty, fill_price, commission)
                 trade_return = None
@@ -85,8 +113,34 @@ class BacktestEngine:
                         "timestamp": timestamp,
                         "symbol": order.symbol,
                         "side": order.side,
-                        "quantity": order.quantity,
+                        "quantity": simulated.filled_quantity,
+                        "requested_quantity": order.quantity,
+                        "remaining_quantity": simulated.remaining_quantity,
+                        "order_type": order.order_type,
+                        "time_in_force": order.time_in_force,
+                        "limit_price": order.limit_price,
+                        "stop_price": order.stop_price,
+                        "trail_price": order.trail_price,
+                        "trail_percent": order.trail_percent,
+                        "raw_fill_price": simulated.fill_price,
                         "fill_price": fill_price,
+                        "fill_status": simulated.status,
+                        "fill_reason": simulated.reason,
+                        "fill_bar_open": float(bar["open"]),
+                        "fill_bar_high": float(bar["high"]),
+                        "fill_bar_low": float(bar["low"]),
+                        "fill_bar_close": float(bar["close"]),
+                        "fill_bar_vwap": float(bar["vwap"]) if pd.notna(bar.get("vwap")) else None,
+                        "fill_bar_volume": float(bar["volume"]),
+                        "fill_model": {
+                            "market_fill_price": self.config.market_fill_price,
+                            "limit_fill_price": self.config.limit_fill_price,
+                            "stop_fill_price": self.config.stop_fill_price,
+                            "intrabar_price_path": self.config.intrabar_price_path,
+                            "max_fill_volume_pct": self.config.max_fill_volume_pct,
+                            "allow_partial_fills": self.config.allow_partial_fills,
+                            "slippage_bps": self.config.slippage_bps,
+                        },
                         "commission": commission,
                         "cash_after": portfolio.cash,
                         "position_after": fill.after_quantity,
@@ -104,6 +158,16 @@ class BacktestEngine:
                         "signal_snapshot": order.metadata.get("signal_snapshot"),
                     }
                 )
+                if simulated.remaining_quantity > 1e-9 and order.time_in_force not in {"ioc", "fok", "opg", "cls"}:
+                    still_pending.append(
+                        PendingOrder(
+                            ready_index=index + 1,
+                            order=replace(order, quantity=simulated.remaining_quantity),
+                            trail_hwm=simulated.trail_hwm,
+                            attempts=pending.attempts + 1,
+                        )
+                    )
+            pending_orders = still_pending
 
             equity_after_fills = portfolio.equity(latest_prices)
             daily_pnl = equity_after_fills - session_start_equity
@@ -120,7 +184,8 @@ class BacktestEngine:
                 history = data[data["timestamp"] <= timestamp]
                 targets = self.risk_manager.validate_targets(self.strategy.generate_targets(history, timestamp))
             pending_quantities: dict[str, float] = {}
-            for _, pending_order in pending_orders:
+            for pending in pending_orders:
+                pending_order = pending.order
                 signed = pending_order.quantity if pending_order.side == "buy" else -pending_order.quantity
                 pending_quantities[pending_order.symbol] = pending_quantities.get(pending_order.symbol, 0.0) + signed
 
@@ -132,7 +197,10 @@ class BacktestEngine:
                 pending_quantities=pending_quantities,
             )
             orders = self.risk_manager.validate_orders(orders, latest_prices, timestamp)
-            pending_orders.extend((index + max(self.config.latency_bars, 0), order) for order in orders)
+            pending_orders.extend(
+                PendingOrder(index + max(self.config.latency_bars, 0), order)
+                for order in orders
+            )
 
             equity = portfolio.equity(latest_prices)
             gross_exposure = (
@@ -149,6 +217,7 @@ class BacktestEngine:
                     "gross_exposure": gross_exposure,
                     "daily_pnl": daily_pnl,
                     "risk_halted": risk_halted,
+                    "pending_orders": len(pending_orders),
                 }
             )
 

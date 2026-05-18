@@ -10,6 +10,9 @@ from qts.strategies.base import OrderRequest, TargetPosition
 
 
 class RiskManager:
+    SUPPORTED_ORDER_TYPES = {"market", "limit", "stop", "stop_limit", "trailing_stop"}
+    SUPPORTED_TIME_IN_FORCE = {"day", "gtc", "opg", "cls", "ioc", "fok"}
+
     def __init__(self, config: RiskConfig) -> None:
         self.config = config
 
@@ -51,6 +54,10 @@ class RiskManager:
 
         approved: list[OrderRequest] = []
         for order in orders:
+            normalized_order = self._normalize_and_validate_order(order)
+            if normalized_order is None:
+                continue
+            order = normalized_order
             price = latest_prices.get(order.symbol.upper())
             if price is None or price <= 0:
                 continue
@@ -81,6 +88,27 @@ class RiskManager:
         if start <= end:
             return start <= current_time <= end
         return current_time >= start or current_time <= end
+
+    def _normalize_and_validate_order(self, order: OrderRequest) -> OrderRequest | None:
+        order_type = order.order_type.lower()
+        tif = order.time_in_force.lower()
+        if order_type not in self.SUPPORTED_ORDER_TYPES or tif not in self.SUPPORTED_TIME_IN_FORCE:
+            return None
+        if order.extended_hours and not (order_type == "limit" and tif in {"day", "gtc"}):
+            return None
+        if tif in {"opg", "cls", "ioc", "fok"} and order_type not in {"market", "limit"}:
+            return None
+        if order_type in {"stop", "stop_limit", "trailing_stop"} and tif not in {"day", "gtc"}:
+            return None
+        if order_type == "limit" and order.limit_price is None:
+            return None
+        if order_type == "stop" and order.stop_price is None:
+            return None
+        if order_type == "stop_limit" and (order.stop_price is None or order.limit_price is None):
+            return None
+        if order_type == "trailing_stop" and order.trail_price is None and order.trail_percent is None:
+            return None
+        return replace(order, order_type=order_type, time_in_force=tif, side=order.side.lower(), symbol=order.symbol.upper())
 
 
 def _parse_time(value: str) -> time:

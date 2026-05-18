@@ -15,6 +15,8 @@ The project is a working lightweight research/backtesting MVP for local quantita
 - Added breakout signals and strengthened signal combination behavior.
 - Added order-level risk checks, session filters, max order notional, max quantity, and kill-switch flattening.
 - Improved backtest order planning by accounting for pending latency-delayed orders.
+- Replaced close-price-only fill logic with configurable OHLCV order simulation for market, limit, stop, stop-limit, and trailing-stop orders.
+- Added strategy config order defaults and dynamic limit/stop price offsets.
 - Added safe paper-trading dry-run behavior that does not require credentials or network access unless `--connect` is requested.
 - Added summary report output.
 - Added tests for validation, features, metrics, risk, signal combination, and existing core workflows.
@@ -66,15 +68,15 @@ Last run in the repository virtual environment:
 .venv/bin/python scripts/train_model.py --config configs/backtest.yaml passed.
 .venv/bin/python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-run passed without Alpaca credentials or network connection.
 .venv/bin/python -m pytest
-34 passed
+41 passed
 ```
 
 Package created at `/tmp/quant_trading_system_mvp_clean.zip`. The archive excludes `.env`, `.git`, `.venv`, caches, egg-info, and stale Alpaca data partitions.
 
 ## Known Limitations
 
-- Backtest fills are simplified market-order fills at a future bar close with configurable latency, slippage, and commissions.
-- Partial fills, queue priority, borrow availability, margin constraints, corporate actions, and exchange microstructure are not modeled.
+- Backtest fills are OHLCV bar simulations with configurable latency, market fill price, slippage, commissions, partial fills, and basic order-type behavior.
+- Queue priority, spread dynamics, borrow availability, margin constraints, corporate actions, and exchange microstructure are not modeled.
 - The paper-trading loop is a safe dry-run/connectivity scaffold, not a full autonomous execution daemon.
 - Alpaca live trading is disabled by default and has not been tested with live credentials.
 - Second-level bars are supported when normalized local data is available; this is not high-frequency trading infrastructure.

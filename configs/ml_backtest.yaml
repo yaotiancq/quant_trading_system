@@ -15,6 +15,8 @@ strategy:
     long_threshold: 0.55
     short_threshold: 0.45
     target_notional_fraction: 0.95
+    order_type: market
+    time_in_force: day
 risk:
   max_gross_exposure: 1.0
   max_symbol_exposure: 1.0
@@ -31,5 +33,11 @@ backtest:
   commission_per_share: 0.0
   slippage_bps: 1.0
   latency_bars: 1
+  market_fill_price: open
+  limit_fill_price: limit
+  stop_fill_price: stop
+  intrabar_price_path: open_high_low_close
+  max_fill_volume_pct: 0.1
+  allow_partial_fills: true
   annualization_periods: 252
   output_dir: reports/ml_backtests
