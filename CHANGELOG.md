@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-05-18 BrokerAdapter Architecture Refactor
+
+- Added canonical backtest order models in `qts.backtest.orders` and fill models in `qts.backtest.fills`.
+- Added `BacktestBroker` as the backtest implementation of the shared `BrokerAdapter` interface.
+- Added `AlpacaPaperBroker` and disabled-by-default `AlpacaLiveBroker` behavior.
+- Refactored strategies to produce standardized `OrderRequest` objects through `generate_orders(...)`.
+- Refactored `BacktestEngine` so it orchestrates time, risk validation, and broker submission without directly changing cash or positions.
+- Restricted portfolio public accounting mutation to `FillEvent` processing.
+- Added `ExecutionSimulator` alias for the OHLCV bar execution simulator.
+- Updated configs with explicit `execution`, `broker`, and order-risk fields.
+- Added architecture tests for BrokerAdapter conformance, risk-before-submit ordering, fill-event-only portfolio updates, and live broker safety.
+- Updated documentation to explain the mode-independent execution flow.
+
 ## 2026-05-17
 
 - Added deterministic sample data generator and regenerated `data/raw/sample_bars.csv`.
@@ -26,3 +39,11 @@
 - Added order defaults in strategy config and dynamic limit/stop basis-point offsets.
 - Expanded `trades.csv` with raw fill price, fill reason, order fields, remaining quantity, and fill bar OHLCV.
 - Added execution simulator tests and next-bar-open backtest coverage.
+
+## 2026-05-17 Order-Driven Backtest Refactor
+
+- Added `qts.backtest.broker.SimulatedBroker` with order IDs, order status, latency, open-order quantities, partial-fill state, expiry, cancellation, and event history.
+- Refactored `BacktestEngine` to submit orders to the simulated broker and consume fill events instead of managing pending orders internally.
+- Kept fill-price assumptions in `qts.backtest.execution` and portfolio accounting in `qts.backtest.portfolio`.
+- Added `orders.csv` and `order_events.csv` report artifacts.
+- Added broker lifecycle tests and engine assertions for order IDs/status.

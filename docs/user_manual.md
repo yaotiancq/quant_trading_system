@@ -46,9 +46,9 @@ The most important source modules are:
 qts.data                 Data loading, validation, Alpaca download adapter, Parquet storage
 qts.features             Deterministic feature engineering
 qts.signals              Unified rule-based and ML signal interface
-qts.strategies           Strategy wrappers that convert signals into target positions
-qts.backtest             Portfolio accounting, execution simulation, metrics
-qts.risk                 Target validation and exposure limits
+qts.strategies           Strategy wrappers that convert signals into OrderRequest objects
+qts.backtest             Backtest broker, portfolio accounting, execution simulation, metrics
+qts.risk                 Order validation and exposure limits
 qts.ml                   Dataset creation, baseline model, ML signal provider
 qts.execution            Broker adapter interface and Alpaca paper/live adapter guard
 qts.reporting            CSV, JSON, and chart output
@@ -80,27 +80,41 @@ strategy:
     time_in_force: day
 risk:
   max_gross_exposure: 1.0
+  max_portfolio_exposure: 1.0
   max_symbol_exposure: 1.0
   max_order_notional: 50000
   max_position_quantity: 1000
+  max_position_qty: 1000
   allow_short: true
 backtest:
   initial_cash: 100000
-  slippage_bps: 1.0
+  slippage_bps: 2.0
+  commission_bps: 0.0
+  fixed_commission: 0.0
   latency_bars: 1
-  market_fill_price: open
+  latency_seconds: 0
+  market_order_fill: next_open
   limit_fill_price: limit
   stop_fill_price: stop
   intrabar_price_path: open_high_low_close
-  max_fill_volume_pct: 0.1
-  allow_partial_fills: true
+  volume_participation_limit: 0.05
+  allow_partial_fills: false
+execution:
+  mode: backtest
+  broker: backtest
+  market_order_fill: next_open
+broker:
+  provider: alpaca
+  paper: true
+  live_trading_enabled: false
+  require_order_confirmation: true
 ```
 
 Important assumptions such as slippage, commissions, latency, exposure limits, and starting cash should be changed in config rather than hard-coded into strategies.
 
 `latency_bars` must be at least `1`. The engine assumes signals are generated after the current bar is known and orders fill no earlier than a later bar. This avoids same-bar close-to-close look-ahead behavior.
 
-The default market-order simulation fills at the next eligible bar open, not the signal bar close. You can change `market_fill_price` to `close`, `hlc3`, `ohlc4`, or `vwap` for sensitivity analysis.
+The default market-order simulation fills at the next eligible bar open, not the signal bar close. You can change `market_order_fill` to `next_close`, `next_vwap`, or `current_close` for sensitivity analysis. `current_close` is intentionally not the default because it can be optimistic.
 
 Loaded timestamps default to Pacific Time through `timezone: America/Los_Angeles`. The aliases `PT`, `PST`, and `PDT` are accepted and normalized to `America/Los_Angeles`. Raw timestamps with an explicit timezone, such as `Z`/UTC Alpaca timestamps, are converted to the configured timezone. Naive timestamps are treated the same way pandas treats them during UTC normalization, so prefer timezone-aware raw data.
 
@@ -135,6 +149,8 @@ Outputs:
 ```text
 reports/backtests/equity_curve.csv
 reports/backtests/trades.csv
+reports/backtests/orders.csv
+reports/backtests/order_events.csv
 reports/backtests/metrics.json
 reports/backtests/run_metadata.json
 reports/backtests/summary.md
@@ -253,7 +269,7 @@ Rule-based and ML signals both use the same `TradingSignal` schema. Each signal 
 - `feature_set`: features used by the provider
 - `confidence_metadata`: how confidence was produced
 
-This provenance is preserved into target positions, order metadata, and backtest trade logs for attribution and risk review.
+This provenance is preserved into order metadata and backtest trade logs for attribution and risk review.
 
 ## 11. Run Paper Trading Dry-Run
 
@@ -271,7 +287,7 @@ python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-ru
 
 This does not run a full autonomous trading loop yet.
 
-The shared execution helper `qts.execution.plan_orders_from_targets` converts strategy target positions into market order requests from account equity, current positions, and latest prices. The backtest portfolio uses the same helper, which keeps research and future paper/live order planning aligned.
+The shared execution helper `qts.execution.plan_orders_from_targets` converts signal targets into `OrderRequest` objects from account equity, current positions, pending orders, and latest prices. `SignalDrivenStrategy.generate_orders` uses the same broker-neutral path whether the broker is `BacktestBroker`, `AlpacaPaperBroker`, or a future guarded live broker.
 
 ## 12. Create a New Rule-Based Signal
 
@@ -310,6 +326,8 @@ Key files:
 
 - `equity_curve.csv`: cash, market value, equity, and exposure over time.
 - `trades.csv`: simulated fills, position after fill, closed quantity, realized PnL, holding period, and signal provenance.
+- `orders.csv`: final simulated broker state for every submitted order.
+- `order_events.csv`: status transition history for submitted, accepted, partial fill, fill, cancel, and expiry events.
 - `metrics.json`: summary metrics.
 - `run_metadata.json`: config snapshot and input data summary for reproducibility.
 - `<SYMBOL>_diagnostics.png`: price, indicator, volume, and trade-marker diagnostics.
@@ -336,6 +354,7 @@ The max daily loss guard resets at the next UTC date in the historical data.
 
 `trades.csv` includes execution simulation details:
 
+- `order_id`
 - `order_type` and `time_in_force`
 - `requested_quantity`, `quantity`, and `remaining_quantity`
 - `limit_price`, `stop_price`, `trail_price`, and `trail_percent`
@@ -345,6 +364,8 @@ The max daily loss guard resets at the next UTC date in the historical data.
 - `fill_bar_open`, `fill_bar_high`, `fill_bar_low`, `fill_bar_close`, `fill_bar_vwap`, and `fill_bar_volume`
 
 Supported order types are `market`, `limit`, `stop`, `stop_limit`, and `trailing_stop`. Supported time-in-force values are `day`, `gtc`, `opg`, `cls`, `ioc`, and `fok`.
+
+The backtest is now order-driven. The strategy produces intent, the order planner creates `OrderRequest` objects, the risk manager validates them, the simulated broker owns order status and latency, the execution simulator decides fills from bar data, and the portfolio module applies fills to cash and positions.
 
 To experiment with a limit order generated from the signal bar close:
 

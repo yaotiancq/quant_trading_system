@@ -5,9 +5,10 @@ import pandas as pd
 from qts.config.models import StrategyConfig
 from qts.ml.model import BaselineModel
 from qts.ml.signal_provider import MLSignalProvider
+from qts.execution.order_planner import broker_position_quantities, plan_orders_from_targets
 from qts.signals.base import SignalDirection, SignalProvider
 from qts.signals.rule_based import BreakoutSignal, MovingAverageCrossoverSignal, RsiMeanReversionSignal
-from qts.strategies.base import TargetPosition
+from qts.strategies.base import OrderRequest, TargetPosition
 
 
 class SignalDrivenStrategy:
@@ -38,6 +39,26 @@ class SignalDrivenStrategy:
                 )
             )
         return targets
+
+    def generate_orders(self, history: pd.DataFrame, timestamp: pd.Timestamp, broker: object) -> list[OrderRequest]:
+        targets = self.generate_targets(history, timestamp)
+        account = broker.get_account()
+        current_quantities = broker_position_quantities(broker.get_positions())
+        pending_quantities = broker.open_order_quantities() if hasattr(broker, "open_order_quantities") else {}
+        for symbol, quantity in pending_quantities.items():
+            current_quantities[symbol] = current_quantities.get(symbol, 0.0) + quantity
+        latest_prices = getattr(broker, "latest_prices", {})
+        max_position_notional = float(getattr(broker, "max_position_notional", float("inf")))
+        orders = plan_orders_from_targets(
+            targets=targets,
+            equity=float(getattr(account, "equity")),
+            current_quantities=current_quantities,
+            latest_prices=latest_prices,
+            timestamp=timestamp,
+            max_position_notional=max_position_notional,
+            strategy_id=self.name,
+        )
+        return orders
 
 
 def create_strategy_from_config(config: StrategyConfig) -> SignalDrivenStrategy:

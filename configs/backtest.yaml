@@ -21,10 +21,12 @@ strategy:
     # stop_price_offset_bps: 10
 risk:
   max_gross_exposure: 1.0
+  max_portfolio_exposure: 1.0
   max_symbol_exposure: 1.0
   max_position_notional: 95000
   max_order_notional: 50000
   max_position_quantity: 1000
+  max_position_qty: 1000
   max_daily_loss: 5000
   allow_short: true
   kill_switch: false
@@ -33,13 +35,35 @@ risk:
 backtest:
   initial_cash: 100000
   commission_per_share: 0.0
-  slippage_bps: 1.0
+  commission_bps: 0.0
+  fixed_commission: 0.0
+  slippage_bps: 2.0
   latency_bars: 1
-  market_fill_price: open
+  latency_seconds: 0
+  market_order_fill: next_open
   limit_fill_price: limit
   stop_fill_price: stop
   intrabar_price_path: open_high_low_close
-  max_fill_volume_pct: 0.1
-  allow_partial_fills: true
+  volume_participation_limit: 0.05
+  allow_partial_fills: false
   annualization_periods: 252
   output_dir: reports/backtests
+execution:
+  mode: backtest
+  broker: backtest
+  market_order_fill: next_open
+  slippage_bps: 2.0
+  commission_bps: 0.0
+  fixed_commission: 0.0
+  latency_bars: 1
+  latency_seconds: 0
+  allow_partial_fills: false
+  volume_participation_limit: 0.05
+  dry_run: true
+  live_trading_enabled: false
+  require_order_confirmation: true
+broker:
+  provider: alpaca
+  paper: true
+  live_trading_enabled: false
+  require_order_confirmation: true

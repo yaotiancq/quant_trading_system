@@ -12,7 +12,7 @@ The ML layer is optional and first-class. Models do not place trades directly. T
 6. Save the model with `joblib`.
 7. Load the model for inference.
 8. Convert probabilities into `TradingSignal` objects.
-9. Backtest the ML signal provider through the same strategy and backtest engine used by rule-based signals.
+9. Backtest the ML signal provider through the same strategy, `OrderRequest`, risk, broker, and portfolio flow used by rule-based signals.
 
 ML `TradingSignal` objects include `SignalProvenance` with `source_type=ML`, `source_name`, `model_version`, and the feature set used for inference. Confidence metadata includes the predicted probability and decision thresholds.
 

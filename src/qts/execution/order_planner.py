@@ -7,8 +7,9 @@ from enum import Enum
 import pandas as pd
 import numpy as np
 
+from qts.backtest.orders import OrderRequest, OrderSide
 from qts.signals.base import TradingSignal
-from qts.strategies.base import OrderRequest, TargetPosition
+from qts.strategies.base import TargetPosition
 
 
 def plan_orders_from_targets(
@@ -19,6 +20,7 @@ def plan_orders_from_targets(
     timestamp: datetime | pd.Timestamp,
     max_position_notional: float,
     min_quantity: float = 1e-9,
+    strategy_id: str | None = None,
 ) -> list[OrderRequest]:
     if equity <= 0:
         return []
@@ -42,7 +44,7 @@ def plan_orders_from_targets(
         if abs(delta_quantity) <= min_quantity:
             continue
 
-        side = "buy" if delta_quantity > 0 else "sell"
+        side = _order_side_for_delta(delta_quantity, current_quantity)
         limit_price = _optional_float(target.metadata.get("limit_price"))
         stop_price = _optional_float(target.metadata.get("stop_price"))
         if limit_price is None:
@@ -64,6 +66,7 @@ def plan_orders_from_targets(
                 trail_percent=_optional_float(target.metadata.get("trail_percent")),
                 extended_hours=bool(target.metadata.get("extended_hours", False)),
                 order_class=str(target.metadata["order_class"]) if target.metadata.get("order_class") else None,
+                strategy_id=str(target.metadata.get("strategy_id", strategy_id)) if target.metadata.get("strategy_id", strategy_id) else None,
                 metadata={
                     "target_fraction": target.target_fraction,
                     "target_notional": capped_notional,
@@ -81,8 +84,14 @@ def broker_position_quantities(positions: Iterable[object]) -> dict[str, float]:
     quantities: dict[str, float] = {}
     for position in positions:
         symbol = str(getattr(position, "symbol")).upper()
-        quantities[symbol] = float(getattr(position, "qty"))
+        quantities[symbol] = float(getattr(position, "qty", getattr(position, "quantity", 0.0)))
     return quantities
+
+
+def _order_side_for_delta(delta_quantity: float, current_quantity: float) -> OrderSide:
+    if delta_quantity > 0:
+        return OrderSide.BUY_TO_COVER if current_quantity < 0 else OrderSide.BUY
+    return OrderSide.SELL if current_quantity > 0 else OrderSide.SELL_SHORT
 
 
 def _to_datetime(value: datetime | pd.Timestamp) -> datetime:
@@ -141,10 +150,11 @@ def _offset_price(value: object, reference_price: float, side: str, price_type: 
     if value is None:
         return None
     offset = float(value) / 10_000
+    is_buy = side in {OrderSide.BUY, OrderSide.BUY_TO_COVER, "buy", "buy_to_cover"}
     if price_type == "limit":
-        multiplier = 1 - offset if side == "buy" else 1 + offset
+        multiplier = 1 - offset if is_buy else 1 + offset
     else:
-        multiplier = 1 + offset if side == "buy" else 1 - offset
+        multiplier = 1 + offset if is_buy else 1 - offset
     return reference_price * multiplier
 
 

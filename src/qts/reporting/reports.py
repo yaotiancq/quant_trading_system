@@ -97,6 +97,8 @@ def _write_summary_markdown(path: Path, result: BacktestResult, metadata: dict[s
             "",
             "- equity_curve.csv",
             "- trades.csv",
+            "- orders.csv",
+            "- order_events.csv",
             "- metrics.json",
             "- run_metadata.json",
         ]

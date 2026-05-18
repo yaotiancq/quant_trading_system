@@ -15,9 +15,9 @@ The system is designed for fast strategy iteration, repeatable backtests, local 
 - Unified signal interface for rule-based and ML signals.
 - Moving average crossover, RSI mean reversion, and breakout rule-based signals.
 - Baseline logistic regression ML model and ML signal provider.
-- Strategy interface that converts signals into target positions.
-- Bar-by-bar backtest engine with latency, slippage, commissions, cash, positions, trades, equity, and metrics.
-- Alpaca broker adapter for paper trading and future guarded live trading.
+- Strategy interface that converts signals into broker-neutral `OrderRequest` objects through the shared order planner.
+- Order-driven bar-by-bar backtest engine with simulated broker order status, latency, fills, slippage, commissions, cash, positions, trades, equity, and metrics.
+- Shared `BrokerAdapter` interface with a backtest broker, Alpaca paper broker, and guarded disabled live broker.
 - Lightweight reporting to CSV, JSON, and optional equity chart.
 - Tests for config, data loading, validation, features, signals, risk, metrics, order planning, charts, and backtest behavior.
 
@@ -59,7 +59,7 @@ python scripts/run_backtest.py --config configs/backtest.yaml
 ```
 
 Outputs are written to `reports/backtests/`.
-Each report also includes `summary.md` and `run_metadata.json` with the config snapshot and input data summary.
+Each report also includes `orders.csv`, `order_events.csv`, `summary.md`, and `run_metadata.json` with the config snapshot and input data summary.
 When charting is enabled, reports include `equity_curve.png` and `<SYMBOL>_diagnostics.png` with price action, indicators, volume, and buy/sell markers.
 
 ## Download Alpaca Historical Data
@@ -96,6 +96,16 @@ python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-ru
 
 The default paper config is `dry_run: true`. The command above validates configuration without opening an Alpaca connection or submitting orders. Use `--connect --once` when credentials are configured and you explicitly want to check Alpaca account/clock connectivity.
 
+## Execution Architecture
+
+Strategies are mode-independent. The shared flow is:
+
+```text
+SignalProvider -> Strategy -> OrderRequest -> RiskManager -> BrokerAdapter -> FillEvent -> Portfolio -> Reporting
+```
+
+Backtests use `BacktestBroker` and `BarExecutionSimulator`; Alpaca paper trading uses `AlpacaPaperBroker`; future live trading uses the same interface but remains disabled unless explicitly configured.
+
 ## Repository Structure
 
 ```text
@@ -110,7 +120,7 @@ tests/                   Pytest suite
 
 ## Known Limitations
 
-- The paper trading loop is a safe dry-run/connectivity scaffold, not a full autonomous trading loop yet.
+- The paper trading loop is a safe dry-run/connectivity scaffold. The broker adapter and strategy order path are shared, but continuous Alpaca bar polling and autonomous submission are intentionally not enabled by default.
 - Live trading is blocked unless explicitly enabled and should receive additional operational review.
 - The backtest engine uses OHLCV bar execution assumptions for supported order types, but it still does not model queue position, spread dynamics, borrow availability, or full market microstructure.
 - Second-level bars are supported by the data model and event loop when data is available. The current Alpaca stock-bar adapter supports SDK-exposed bar intervals; second-level Alpaca data should be added through local normalized bars or a future trade/quote aggregation adapter.

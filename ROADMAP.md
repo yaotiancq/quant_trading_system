@@ -11,6 +11,11 @@
 - Signal-driven strategy wrapper.
 - Bar-by-bar backtest engine with cash, positions, realized/unrealized PnL, latency, slippage, commissions, trade logs, equity curves, and metrics.
 - OHLCV order execution simulator for market, limit, stop, stop-limit, and trailing-stop orders.
+- Simulated backtest broker with order IDs, order status, latency, partial fills, expiry, cancellation, and order event logs.
+- Shared `BrokerAdapter` architecture for backtest, Alpaca paper trading, and future guarded live trading.
+- Canonical `OrderRequest` and `FillEvent` models shared by strategies, risk, brokers, execution simulation, and portfolio accounting.
+- Strategy `generate_orders(...)` flow that keeps strategy logic mode-independent.
+- Disabled-by-default `AlpacaLiveBroker` guard.
 - Configurable market fill prices, intrabar path assumptions, and partial fills.
 - Shared order planner and risk manager.
 - Alpaca historical downloader and isolated broker adapter.
@@ -25,6 +30,7 @@
 - Add stronger trade attribution and per-symbol performance summaries.
 - Add data calendar/session helpers for holidays and early closes.
 - Add paper-trading loop order planning from recent Alpaca bars in dry-run first.
+- Add broker/account reconciliation tests around live Alpaca paper responses.
 
 ## Future Enhancements
 

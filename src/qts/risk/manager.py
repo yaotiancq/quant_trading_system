@@ -6,7 +6,8 @@ from datetime import datetime, time
 import pandas as pd
 
 from qts.config.models import RiskConfig
-from qts.strategies.base import OrderRequest, TargetPosition
+from qts.backtest.orders import OrderRequest, OrderSide, OrderType
+from qts.strategies.base import TargetPosition
 
 
 class RiskManager:
@@ -62,9 +63,12 @@ class RiskManager:
             if price is None or price <= 0:
                 continue
 
+            if order.side == OrderSide.SELL_SHORT and not self.config.allow_short:
+                continue
+            requested_quantity = float(order.quantity or ((order.notional or 0.0) / price))
             max_quantity_by_notional = self.config.max_order_notional / price
             max_quantity = min(self.config.max_position_quantity, max_quantity_by_notional)
-            quantity = min(order.quantity, max_quantity)
+            quantity = min(requested_quantity, max_quantity)
             if quantity <= 1e-9:
                 continue
 
@@ -90,7 +94,7 @@ class RiskManager:
         return current_time >= start or current_time <= end
 
     def _normalize_and_validate_order(self, order: OrderRequest) -> OrderRequest | None:
-        order_type = order.order_type.lower()
+        order_type = order.order_type.value
         tif = order.time_in_force.lower()
         if order_type not in self.SUPPORTED_ORDER_TYPES or tif not in self.SUPPORTED_TIME_IN_FORCE:
             return None
@@ -108,7 +112,7 @@ class RiskManager:
             return None
         if order_type == "trailing_stop" and order.trail_price is None and order.trail_percent is None:
             return None
-        return replace(order, order_type=order_type, time_in_force=tif, side=order.side.lower(), symbol=order.symbol.upper())
+        return replace(order, order_type=OrderType(order_type), time_in_force=tif, symbol=order.symbol.upper())
 
 
 def _parse_time(value: str) -> time:

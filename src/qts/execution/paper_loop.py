@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from qts.config.loader import EnvSettings
 from qts.config.models import AppConfig
-from qts.execution.alpaca_broker import AlpacaBrokerAdapter
+from qts.execution.alpaca_broker import AlpacaLiveBroker, AlpacaPaperBroker
 from qts.utils.logging import get_logger
 
 
@@ -37,10 +37,10 @@ def run_paper_loop(
     if not settings.has_alpaca_credentials:
         raise ValueError("Alpaca API credentials are required for paper trading connectivity.")
 
-    broker = AlpacaBrokerAdapter(
-        settings,
-        paper=config.execution.paper,
-        live_trading_enabled=config.execution.live_trading_enabled,
+    broker = (
+        AlpacaPaperBroker(settings)
+        if config.execution.paper
+        else AlpacaLiveBroker(settings, live_trading_enabled=config.execution.live_trading_enabled)
     )
     max_iterations = iterations if iterations is not None else 1 if effective_dry_run else None
     count = 0

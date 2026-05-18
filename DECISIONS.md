@@ -1,11 +1,11 @@
 # Decisions
 
-Date: 2026-05-17
+Date: 2026-05-18
 
 ## Architecture Decisions
 
 - Keep the project as a lightweight Python package with CLI scripts. No web dashboard, scheduler, queue, or distributed infrastructure is included.
-- Keep strategies broker-independent. Strategies generate target positions; backtests and broker adapters handle execution details.
+- The system uses an order-driven BrokerAdapter architecture so that backtesting, paper trading, and future live trading share the same strategy-to-order workflow. Strategies produce OrderRequest objects. Broker implementations differ by mode, but strategy logic remains mode-independent.
 - Treat rule-based and ML signals as equal first-class providers through the `TradingSignal` interface.
 - Keep Alpaca-specific code isolated in data and execution adapters.
 
@@ -17,6 +17,11 @@ Date: 2026-05-17
 
 ## Backtest Assumptions
 
+- Backtests are order-driven. The engine submits explicit `OrderRequest` objects to a simulated broker instead of directly mutating positions from signals.
+- The common flow is `SignalProvider -> Strategy -> OrderRequest -> RiskManager -> BrokerAdapter -> FillEvent -> Portfolio -> Reporting`.
+- The simulated broker owns order IDs, status, latency, expiry, cancellation, partial-fill state, and open-order quantities.
+- The execution simulator owns fill-price, slippage, commission, and bar-touch assumptions.
+- The portfolio module owns cash, positions, average prices, and realized PnL. Public accounting mutation is through `FillEvent` processing.
 - Signals are generated after the current bar is known.
 - Orders fill no earlier than a later bar based on `latency_bars`.
 - Market orders default to the next eligible bar open, with configurable alternatives such as close, HLC3, OHLC4, and VWAP.

@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-import pandas as pd
-
-from qts.execution.order_planner import plan_orders_from_targets
-from qts.strategies.base import OrderRequest, TargetPosition
+from qts.backtest.fills import FillEvent
 
 
 @dataclass
@@ -28,11 +25,32 @@ class FillResult:
     realized_pnl: float | None
 
 
+@dataclass(frozen=True)
+class AccountSnapshot:
+    cash: float
+    equity: float
+    buying_power: float
+    realized_pnl: float
+    unrealized_pnl: float
+
+
+@dataclass(frozen=True)
+class PositionSnapshot:
+    symbol: str
+    qty: float
+    average_price: float
+    market_value: float
+    unrealized_pnl: float
+
+
 @dataclass
 class Portfolio:
     initial_cash: float
     cash: float = field(init=False)
     positions: dict[str, Position] = field(default_factory=dict)
+    realized_pnl: float = 0.0
+    fill_history: list[FillEvent] = field(default_factory=list)
+    trade_history: list[FillResult] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.cash = self.initial_cash
@@ -43,27 +61,53 @@ class Portfolio:
     def equity(self, prices: dict[str, float]) -> float:
         return self.cash + self.market_value(prices)
 
-    def orders_for_targets(
-        self,
-        targets: list[TargetPosition],
-        prices: dict[str, float],
-        timestamp: pd.Timestamp,
-        max_position_notional: float,
-        pending_quantities: dict[str, float] | None = None,
-    ) -> list[OrderRequest]:
-        current_quantities = {symbol: position.quantity for symbol, position in self.positions.items()}
-        for symbol, quantity in (pending_quantities or {}).items():
-            current_quantities[symbol] = current_quantities.get(symbol, 0.0) + quantity
-        return plan_orders_from_targets(
-            targets=targets,
-            equity=self.equity(prices),
-            current_quantities=current_quantities,
-            latest_prices=prices,
-            timestamp=timestamp,
-            max_position_notional=max_position_notional,
+    def unrealized_pnl(self, prices: dict[str, float]) -> float:
+        return sum(
+            (prices.get(symbol, pos.average_price) - pos.average_price) * pos.quantity
+            for symbol, pos in self.positions.items()
         )
 
-    def apply_fill(self, symbol: str, signed_quantity: float, fill_price: float, commission: float) -> FillResult:
+    def buying_power(self, prices: dict[str, float]) -> float:
+        return max(self.cash, 0.0) + max(self.equity(prices), 0.0)
+
+    def account_snapshot(self, prices: dict[str, float]) -> AccountSnapshot:
+        return AccountSnapshot(
+            cash=self.cash,
+            equity=self.equity(prices),
+            buying_power=self.buying_power(prices),
+            realized_pnl=self.realized_pnl,
+            unrealized_pnl=self.unrealized_pnl(prices),
+        )
+
+    def position_snapshots(self, prices: dict[str, float]) -> list[PositionSnapshot]:
+        snapshots: list[PositionSnapshot] = []
+        for symbol, position in self.positions.items():
+            price = prices.get(symbol, position.average_price)
+            snapshots.append(
+                PositionSnapshot(
+                    symbol=symbol,
+                    qty=position.quantity,
+                    average_price=position.average_price,
+                    market_value=position.quantity * price,
+                    unrealized_pnl=(price - position.average_price) * position.quantity,
+                )
+            )
+        return snapshots
+
+    def apply_fill_event(self, fill_event: FillEvent) -> FillResult:
+        result = self._apply_fill_values(
+            fill_event.symbol,
+            fill_event.signed_quantity,
+            fill_event.fill_price,
+            fill_event.commission,
+        )
+        self.fill_history.append(fill_event)
+        self.trade_history.append(result)
+        if result.realized_pnl is not None:
+            self.realized_pnl += result.realized_pnl
+        return result
+
+    def _apply_fill_values(self, symbol: str, signed_quantity: float, fill_price: float, commission: float) -> FillResult:
         position = self.positions.setdefault(symbol, Position())
         before_qty = position.quantity
         before_avg = position.average_price

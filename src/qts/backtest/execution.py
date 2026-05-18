@@ -4,8 +4,9 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from qts.backtest.orders import OrderSide
 from qts.config.models import BacktestConfig
-from qts.strategies.base import OrderRequest
+from qts.backtest.orders import OrderRequest
 
 
 @dataclass(frozen=True)
@@ -106,8 +107,11 @@ class BarExecutionSimulator:
         direction = 1 if signed_quantity > 0 else -1
         return price * (1 + direction * self.config.slippage_bps / 10_000)
 
-    def commission(self, quantity: float) -> float:
-        return abs(quantity) * self.config.commission_per_share
+    def commission(self, quantity: float, fill_price: float) -> float:
+        per_share = abs(quantity) * self.config.commission_per_share
+        notional_bps = abs(quantity * fill_price) * self.config.commission_bps / 10_000
+        fixed = self.config.fixed_commission if quantity else 0.0
+        return per_share + notional_bps + fixed
 
     def _market_price(self, bar: pd.Series, tif: str) -> float:
         source = self._market_price_source(tif)
@@ -141,7 +145,7 @@ class BarExecutionSimulator:
             price = float(bar["close"])
             return price if _limit_accepts(order.side, price, limit) else None
 
-        touched = float(bar["low"]) <= limit if order.side == "buy" else float(bar["high"]) >= limit
+        touched = float(bar["low"]) <= limit if _is_buy_side(order.side) else float(bar["high"]) >= limit
         if not touched:
             return None
         open_price = float(bar["open"])
@@ -150,7 +154,7 @@ class BarExecutionSimulator:
         if self.config.limit_fill_price == "touch":
             return limit
         if self.config.limit_fill_price == "midpoint":
-            if order.side == "buy":
+            if _is_buy_side(order.side):
                 return min(limit, (open_price + float(bar["low"])) / 2.0)
             return max(limit, (open_price + float(bar["high"])) / 2.0)
         return limit
@@ -164,7 +168,7 @@ class BarExecutionSimulator:
             return None
         if self.config.stop_fill_price == "market":
             market_price = self._market_price(bar, tif)
-            return max(stop, market_price) if order.side == "buy" else min(stop, market_price)
+            return max(stop, market_price) if _is_buy_side(order.side) else min(stop, market_price)
         return trigger_price
 
     def _stop_limit_price(self, order: OrderRequest, bar: pd.Series, tif: str) -> float | None:
@@ -176,7 +180,7 @@ class BarExecutionSimulator:
         if trigger_price is None:
             return None
 
-        if order.side == "buy":
+        if _is_buy_side(order.side):
             if trigger_price <= limit:
                 return trigger_price
             if float(bar["low"]) <= limit:
@@ -201,7 +205,7 @@ class BarExecutionSimulator:
 
         path = self._price_path(bar, tif)
         hwm = float(trail_hwm if trail_hwm is not None else path[0])
-        if order.side == "sell":
+        if _is_sell_side(order.side):
             hwm = max(hwm, path[0])
             for price in path:
                 hwm = max(hwm, price)
@@ -220,21 +224,21 @@ class BarExecutionSimulator:
     def _stop_trigger_price(self, side: str, stop: float, bar: pd.Series, tif: str) -> float | None:
         if tif == "opg":
             open_price = float(bar["open"])
-            if side == "buy" and open_price >= stop:
+            if _is_buy_side(side) and open_price >= stop:
                 return max(stop, open_price)
-            if side == "sell" and open_price <= stop:
+            if _is_sell_side(side) and open_price <= stop:
                 return min(stop, open_price)
             return None
         if tif == "cls":
             close_price = float(bar["close"])
-            if side == "buy" and close_price >= stop:
+            if _is_buy_side(side) and close_price >= stop:
                 return max(stop, close_price)
-            if side == "sell" and close_price <= stop:
+            if _is_sell_side(side) and close_price <= stop:
                 return min(stop, close_price)
             return None
 
         open_price = float(bar["open"])
-        if side == "buy":
+        if _is_buy_side(side):
             if open_price >= stop:
                 return max(stop, open_price)
             return stop if float(bar["high"]) >= stop else None
@@ -271,15 +275,23 @@ def per_share_commission(quantity: float, commission_per_share: float) -> float:
 
 
 def _limit_accepts(side: str, price: float, limit: float) -> bool:
-    return price <= limit if side == "buy" else price >= limit
+    return price <= limit if _is_buy_side(side) else price >= limit
 
 
 def _trailing_stop_from_hwm(hwm: float, order: OrderRequest) -> float:
     if order.trail_price is not None:
         trail = float(order.trail_price)
-        return hwm - trail if order.side == "sell" else hwm + trail
+        return hwm - trail if _is_sell_side(order.side) else hwm + trail
     trail_percent = float(order.trail_percent or 0.0) / 100.0
-    return hwm * (1 - trail_percent) if order.side == "sell" else hwm * (1 + trail_percent)
+    return hwm * (1 - trail_percent) if _is_sell_side(order.side) else hwm * (1 + trail_percent)
+
+
+def _is_buy_side(side: OrderSide | str) -> bool:
+    return side in {OrderSide.BUY, OrderSide.BUY_TO_COVER, "buy", "buy_to_cover"}
+
+
+def _is_sell_side(side: OrderSide | str) -> bool:
+    return side in {OrderSide.SELL, OrderSide.SELL_SHORT, "sell", "sell_short"}
 
 
 def _no_fill(order: OrderRequest, reason: str, trail_hwm: float | None) -> SimulatedFill:
@@ -293,8 +305,11 @@ def _no_fill(order: OrderRequest, reason: str, trail_hwm: float | None) -> Simul
     )
 
 
+ExecutionSimulator = BarExecutionSimulator
+
 __all__ = [
     "BarExecutionSimulator",
+    "ExecutionSimulator",
     "SimulatedFill",
     "apply_slippage",
     "per_share_commission",

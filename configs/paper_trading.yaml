@@ -13,19 +13,36 @@ strategy:
     target_notional_fraction: 0.25
 risk:
   max_gross_exposure: 0.5
+  max_portfolio_exposure: 0.5
   max_symbol_exposure: 0.25
   max_position_notional: 25000
   max_order_notional: 10000
   max_position_quantity: 100
+  max_position_qty: 100
   max_daily_loss: 1000
   allow_short: false
   kill_switch: false
   trading_session_start: "06:30"
   trading_session_end: "13:00"
 execution:
+  mode: paper
   broker: alpaca
+  market_order_fill: next_open
+  slippage_bps: 2.0
+  commission_bps: 0.0
+  fixed_commission: 0.0
+  latency_bars: 1
+  latency_seconds: 0
+  allow_partial_fills: false
+  volume_participation_limit: 0.05
   paper: true
   dry_run: true
   live_trading_enabled: false
+  require_order_confirmation: true
   order_confirmation_required: true
   poll_interval_seconds: 5
+broker:
+  provider: alpaca
+  paper: true
+  live_trading_enabled: false
+  require_order_confirmation: true
