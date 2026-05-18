@@ -42,7 +42,44 @@ def test_plot_trade_window_creates_file(tmp_path: Path) -> None:
     data, result = _sample_result()
     output = tmp_path / "trade_window.png"
 
-    plot_trade_window(data, result.trades, trade_index=0, output_path=output)
+    plot_trade_window(data, result.trades, trade_index=0, output_path=output, orders=result.orders)
+
+    assert output.exists()
+    assert output.stat().st_size > 0
+
+
+def test_plot_strategy_diagnostics_supports_order_driven_sides(tmp_path: Path) -> None:
+    data, result = _sample_result()
+    timestamp = data["timestamp"].iloc[30]
+    trades = result.trades.head(0).copy()
+    orders = result.orders.head(0).copy()
+
+    for index, side in enumerate(["buy", "sell", "sell_short", "buy_to_cover"]):
+        trades.loc[index, "timestamp"] = timestamp
+        trades.loc[index, "symbol"] = "SPY"
+        trades.loc[index, "side"] = side
+        trades.loc[index, "fill_price"] = float(data["close"].iloc[30]) + index
+        trades.loc[index, "raw_fill_price"] = float(data["close"].iloc[30]) + index - 0.1
+        trades.loc[index, "fill_status"] = "partially_filled" if index == 0 else "filled"
+        trades.loc[index, "order_id"] = f"ORD-{index}"
+
+        orders.loc[index, "submitted_at"] = timestamp
+        orders.loc[index, "ready_at"] = timestamp
+        orders.loc[index, "symbol"] = "SPY"
+        orders.loc[index, "side"] = side
+        orders.loc[index, "status"] = "filled"
+        orders.loc[index, "order_type"] = "market"
+
+    output = tmp_path / "order_driven_sides.png"
+
+    plot_strategy_diagnostics(
+        data.iloc[:80],
+        trades,
+        output,
+        symbol="SPY",
+        oscillator_panels=[],
+        orders=orders,
+    )
 
     assert output.exists()
     assert output.stat().st_size > 0

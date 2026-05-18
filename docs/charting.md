@@ -14,7 +14,9 @@ equity_curve.png
 The diagnostics chart includes:
 
 - candlestick-style OHLC price action
-- buy and sell markers
+- buy, sell, short, and cover fill markers
+- raw fill price markers and slippage lines when simulated fill price differs from raw bar price
+- optional order-submission markers from `orders.csv`
 - moving averages
 - VWAP
 - Bollinger Bands
@@ -32,6 +34,7 @@ plot_strategy_diagnostics(
     trades=result.trades,
     output_path="reports/backtests/SPY_diagnostics.png",
     symbol="SPY",
+    orders=result.orders,
 )
 
 plot_trade_window(
@@ -39,6 +42,7 @@ plot_trade_window(
     trades=result.trades,
     trade_index=0,
     output_path="reports/backtests/SPY_trade_0.png",
+    orders=result.orders,
 )
 ```
 

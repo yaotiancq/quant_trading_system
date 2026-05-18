@@ -166,7 +166,7 @@ python scripts/run_backtest.py --config configs/backtest.yaml --no-chart
 
 `run_metadata.json` contains the run timestamp, QTS version, full config snapshot, data source, symbol list, row count, and data start/end timestamps. Keep it with metrics and trades when comparing strategy runs.
 
-`<SYMBOL>_diagnostics.png` plots candlestick price action with buy/sell markers, moving averages, VWAP, Bollinger Bands, RSI, MACD, and volume panels. Use it for quick visual inspection before deeper quantitative analysis.
+`<SYMBOL>_diagnostics.png` plots candlestick price action with buy, sell, short, and cover fill markers, optional order-submission markers, raw-vs-slipped fill hints, moving averages, VWAP, Bollinger Bands, RSI, MACD, and volume panels. Use it for quick visual inspection before deeper quantitative analysis.
 
 ## 7.1. Use a Custom Local Data File
 
@@ -395,6 +395,7 @@ plot_strategy_diagnostics(
     trades=result.trades,
     output_path="reports/backtests/SPY_diagnostics.png",
     symbol="SPY",
+    orders=result.orders,
 )
 
 plot_trade_window(
@@ -402,13 +403,16 @@ plot_trade_window(
     trades=result.trades,
     trade_index=0,
     output_path="reports/backtests/SPY_trade_0.png",
+    orders=result.orders,
 )
 ```
 
 Supported diagnostics:
 
 - candlestick-style OHLC price panel
-- buy and sell markers from backtest fills
+- buy, sell, short, and cover markers from backtest fills
+- order-submission markers when `orders` is provided
+- raw fill and slipped fill visualization when those prices differ
 - moving averages
 - VWAP
 - Bollinger Bands

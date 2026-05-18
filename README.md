@@ -60,7 +60,7 @@ python scripts/run_backtest.py --config configs/backtest.yaml
 
 Outputs are written to `reports/backtests/`.
 Each report also includes `orders.csv`, `order_events.csv`, `summary.md`, and `run_metadata.json` with the config snapshot and input data summary.
-When charting is enabled, reports include `equity_curve.png` and `<SYMBOL>_diagnostics.png` with price action, indicators, volume, and buy/sell markers.
+When charting is enabled, reports include `equity_curve.png` and `<SYMBOL>_diagnostics.png` with price action, indicators, volume, order-submission markers, and buy/sell/short/cover fill markers.
 
 ## Download Alpaca Historical Data
 

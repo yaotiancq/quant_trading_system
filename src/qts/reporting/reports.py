@@ -49,6 +49,7 @@ def write_backtest_report(
                 trades=result.trades,
                 output_path=path / f"{symbol}_diagnostics.png",
                 symbol=symbol,
+                orders=result.orders,
             )
 
 

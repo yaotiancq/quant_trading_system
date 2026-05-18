@@ -12,6 +12,7 @@
 - Updated configs with explicit `execution`, `broker`, and order-risk fields.
 - Added architecture tests for BrokerAdapter conformance, risk-before-submit ordering, fill-event-only portfolio updates, and live broker safety.
 - Updated documentation to explain the mode-independent execution flow.
+- Updated charting to visualize order submissions, buy/sell/short/cover fills, partial fills, and raw-vs-slipped fill prices.
 
 ## 2026-05-17
 

@@ -14,8 +14,10 @@ def plot_strategy_diagnostics(
     title: str | None = None,
     overlays: list[str] | None = None,
     oscillator_panels: list[str] | None = None,
+    orders: pd.DataFrame | None = None,
+    show_order_markers: bool = True,
 ) -> Path:
-    """Plot price action, trades, and common diagnostics for one symbol."""
+    """Plot price action, simulated fills, optional orders, and common diagnostics."""
     if bars.empty:
         raise ValueError("bars must not be empty.")
 
@@ -25,18 +27,25 @@ def plot_strategy_diagnostics(
     selected_symbol = (symbol or str(bars["symbol"].iloc[0])).upper()
     frame = _with_indicators(_symbol_frame(bars, selected_symbol))
     trade_frame = _symbol_frame(trades, selected_symbol) if not trades.empty and "symbol" in trades else pd.DataFrame()
+    order_frame = (
+        _symbol_frame(orders, selected_symbol, timestamp_column="submitted_at")
+        if orders is not None and not orders.empty and "symbol" in orders
+        else pd.DataFrame()
+    )
 
     overlays = overlays or ["ma_5", "ma_20", "vwap", "bbands"]
     oscillator_panels = oscillator_panels or ["rsi", "macd", "volume"]
     panel_count = 1 + len(oscillator_panels)
     height_ratios = [3.0] + [1.0] * len(oscillator_panels)
-    fig, axes = plt.subplots(panel_count, 1, figsize=(56, 12.8 * panel_count), sharex=True, gridspec_kw={"height_ratios": height_ratios})
+    fig, axes = plt.subplots(panel_count, 1, figsize=(56*2, 12.8*2 * panel_count), sharex=True, gridspec_kw={"height_ratios": height_ratios})
     if panel_count == 1:
         axes = [axes]
 
     x = range(len(frame))
     _plot_candles(axes[0], frame, x)
     _plot_price_overlays(axes[0], frame, overlays)
+    if show_order_markers:
+        _plot_order_markers(axes[0], frame, order_frame)
     _plot_trade_markers(axes[0], frame, trade_frame)
     axes[0].set_title(title or f"{selected_symbol} Strategy Diagnostics")
     axes[0].set_ylabel("Price")
@@ -74,6 +83,7 @@ def plot_trade_window(
     trade_index: int,
     output_path: str | Path,
     window_bars: int = 20,
+    orders: pd.DataFrame | None = None,
 ) -> Path:
     if trades.empty:
         raise ValueError("trades must not be empty.")
@@ -93,22 +103,32 @@ def plot_trade_window(
     window_trades = window_trades[
         (window_trades["timestamp"] >= window["timestamp"].min()) & (window_trades["timestamp"] <= window["timestamp"].max())
     ]
+    window_orders = pd.DataFrame()
+    if orders is not None and not orders.empty and "symbol" in orders:
+        window_orders = _symbol_frame(orders, symbol, timestamp_column="submitted_at")
+        window_orders = window_orders[
+            (window_orders["submitted_at"] >= window["timestamp"].min()) & (window_orders["submitted_at"] <= window["timestamp"].max())
+        ]
     return plot_strategy_diagnostics(
         window,
         window_trades,
         output_path=output_path,
         symbol=symbol,
         title=f"{symbol} Trade Window #{trade_index}",
+        orders=window_orders,
     )
 
 
-def _symbol_frame(data: pd.DataFrame, symbol: str) -> pd.DataFrame:
+def _symbol_frame(data: pd.DataFrame, symbol: str, timestamp_column: str = "timestamp") -> pd.DataFrame:
     frame = data.copy()
     frame["symbol"] = frame["symbol"].astype(str).str.upper()
     frame = frame[frame["symbol"] == symbol.upper()].copy()
-    if "timestamp" in frame:
-        frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
-        frame = frame.sort_values("timestamp")
+    if timestamp_column in frame:
+        frame[timestamp_column] = pd.to_datetime(frame[timestamp_column], utc=True)
+        frame = frame.sort_values(timestamp_column)
+    for column in ("timestamp", "submitted_at", "ready_at", "last_status_at"):
+        if column in frame and column != timestamp_column:
+            frame[column] = pd.to_datetime(frame[column], utc=True, errors="coerce")
     return frame.reset_index(drop=True)
 
 
@@ -179,7 +199,7 @@ def _plot_price_overlays(axis, frame: pd.DataFrame, overlays: list[str]) -> None
 
 
 def _plot_trade_markers(axis, frame: pd.DataFrame, trades: pd.DataFrame) -> None:
-    if trades.empty:
+    if trades.empty or "timestamp" not in trades:
         return
     timestamp_to_x = {timestamp: idx for idx, timestamp in enumerate(frame["timestamp"])}
     for _, trade in trades.iterrows():
@@ -189,10 +209,110 @@ def _plot_trade_markers(axis, frame: pd.DataFrame, trades: pd.DataFrame) -> None
             continue
         price = float(trade.get("fill_price", frame["close"].iloc[x]))
         side = str(trade.get("side", "")).lower()
-        if side == "buy":
-            axis.scatter(x, price, marker="^", color="#1f9d55", s=70, label="Buy" if "Buy" not in axis.get_legend_handles_labels()[1] else None, zorder=5)
-        elif side == "sell":
-            axis.scatter(x, price, marker="v", color="#d13f3f", s=70, label="Sell" if "Sell" not in axis.get_legend_handles_labels()[1] else None, zorder=5)
+        style = _trade_marker_style(side)
+        raw_price = _optional_float(trade.get("raw_fill_price"))
+        if raw_price is not None and abs(raw_price - price) > 1e-9:
+            axis.vlines(x, min(raw_price, price), max(raw_price, price), color="#555555", linewidth=0.8, alpha=0.45, zorder=4)
+            axis.scatter(
+                x,
+                raw_price,
+                marker="_",
+                color="#555555",
+                s=70,
+                alpha=0.75,
+                label=_label_once(axis, "Raw fill"),
+                zorder=5,
+            )
+        status = str(trade.get("fill_status", "")).lower()
+        is_partial = status == "partially_filled"
+        axis.scatter(
+            x,
+            price,
+            marker=style["marker"],
+            color="none" if is_partial else style["color"],
+            edgecolors=style["color"],
+            linewidths=1.2,
+            s=82 if is_partial else 76,
+            alpha=0.95,
+            label=_label_once(axis, style["label"]),
+            zorder=6,
+        )
+
+
+def _plot_order_markers(axis, frame: pd.DataFrame, orders: pd.DataFrame) -> None:
+    if orders.empty or "submitted_at" not in orders:
+        return
+    timestamp_to_x = {timestamp: idx for idx, timestamp in enumerate(frame["timestamp"])}
+    for _, order in orders.iterrows():
+        submitted_at = order.get("submitted_at")
+        if pd.isna(submitted_at):
+            continue
+        x = _nearest_x(frame, timestamp_to_x, pd.Timestamp(submitted_at))
+        if x is None:
+            continue
+        price = _order_reference_price(order, frame, x)
+        axis.scatter(
+            x,
+            price,
+            marker="x",
+            color=_order_status_color(str(order.get("status", ""))),
+            s=42,
+            alpha=0.55,
+            linewidths=0.9,
+            label=_label_once(axis, "Order submitted"),
+            zorder=4,
+        )
+        ready_at = order.get("ready_at")
+        if "ready_at" in orders and ready_at is not None and not pd.isna(ready_at):
+            ready_x = _nearest_x(frame, timestamp_to_x, pd.Timestamp(ready_at))
+            if ready_x is not None and ready_x != x:
+                axis.hlines(price, x, ready_x, color="#777777", linewidth=0.8, alpha=0.35, zorder=3)
+
+
+def _trade_marker_style(side: str) -> dict[str, str]:
+    normalized = side.lower()
+    styles = {
+        "buy": {"marker": "^", "color": "#1f9d55", "label": "Buy"},
+        "buy_to_cover": {"marker": "^", "color": "#b87916", "label": "Cover"},
+        "sell": {"marker": "v", "color": "#d13f3f", "label": "Sell"},
+        "sell_short": {"marker": "v", "color": "#6f4aa1", "label": "Short"},
+    }
+    return styles.get(normalized, {"marker": "o", "color": "#555555", "label": "Fill"})
+
+
+def _order_reference_price(order: pd.Series, frame: pd.DataFrame, x: int) -> float:
+    for column in ("limit_price", "stop_price", "average_fill_price"):
+        if column in order:
+            value = _optional_float(order.get(column))
+            if value is not None:
+                return value
+    return float(frame["close"].iloc[x])
+
+
+def _order_status_color(status: str) -> str:
+    normalized = status.lower()
+    if normalized == "filled":
+        return "#555555"
+    if normalized == "partially_filled":
+        return "#b87916"
+    if normalized in {"rejected", "canceled", "cancelled", "expired"}:
+        return "#9a3b3b"
+    return "#4f6f8f"
+
+
+def _label_once(axis, label: str) -> str | None:
+    return None if label in axis.get_legend_handles_labels()[1] else label
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except TypeError:
+        pass
+    return float(value)
 
 
 def _nearest_x(frame: pd.DataFrame, timestamp_to_x: dict[pd.Timestamp, int], timestamp: pd.Timestamp) -> int | None:

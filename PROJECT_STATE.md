@@ -24,6 +24,7 @@ The project is a working lightweight research/backtesting MVP for local quantita
 - Restricted portfolio accounting to public `FillEvent` processing through `Portfolio.apply_fill_event(...)`.
 - Added `AlpacaPaperBroker` and a disabled-by-default `AlpacaLiveBroker` guard.
 - Added strategy config order defaults and dynamic limit/stop price offsets.
+- Updated diagnostic charts to show order submissions, buy/sell/short/cover fills, partial fills, and raw-vs-slipped fill prices.
 - Added safe paper-trading dry-run behavior that does not require credentials or network access unless `--connect` is requested.
 - Added summary report output.
 - Added tests for validation, features, metrics, risk, signal combination, and existing core workflows.
@@ -81,7 +82,7 @@ Last run in the repository virtual environment:
 .venv/bin/python scripts/train_model.py --config configs/backtest.yaml passed.
 .venv/bin/python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-run passed without Alpaca credentials or network connection.
 .venv/bin/python -m pytest
-52 passed
+53 passed
 ```
 
 Package created at `/tmp/quant_trading_system_order_driven.zip`. The archive excludes `.env`, `.git`, `.venv`, caches, egg-info, and Alpaca data partitions.

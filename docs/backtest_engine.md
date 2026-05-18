@@ -48,7 +48,7 @@ When chart generation is enabled, reports include:
 - `equity_curve.png`
 - `<SYMBOL>_diagnostics.png`
 
-The symbol diagnostics chart includes candlestick-style OHLC price action, buy/sell markers, moving averages, VWAP, Bollinger Bands, RSI, MACD, and volume. The charting module also exposes `plot_trade_window` for inspecting a single fill with surrounding bars.
+The symbol diagnostics chart includes candlestick-style OHLC price action, order-submission markers, buy/sell/short/cover fill markers, raw-vs-slipped fill hints, moving averages, VWAP, Bollinger Bands, RSI, MACD, and volume. The charting module also exposes `plot_trade_window` for inspecting a single fill with surrounding bars.
 
 ## Metrics
 
