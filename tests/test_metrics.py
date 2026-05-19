@@ -38,3 +38,17 @@ def test_metrics_include_required_fields() -> None:
     assert expected.issubset(metrics)
     assert metrics["number_of_trades"] == 2.0
     assert metrics["win_rate"] == 0.5
+
+
+def test_metrics_infer_intraday_annualization_from_timestamps() -> None:
+    equity_curve = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2024-01-02 14:30:00Z", periods=4, freq="min"),
+            "equity": [100_000, 100_100, 100_200, 100_300],
+            "gross_exposure": [0.0, 0.5, 0.5, 0.0],
+        }
+    )
+
+    metrics = calculate_performance_metrics(equity_curve, pd.DataFrame())
+
+    assert metrics["annualization_periods_used"] == 98_280.0

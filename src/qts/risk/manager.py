@@ -49,10 +49,56 @@ class RiskManager:
         orders: list[OrderRequest],
         latest_prices: dict[str, float],
         timestamp: datetime | pd.Timestamp,
+        *,
+        current_quantities: dict[str, float] | None = None,
     ) -> list[OrderRequest]:
-        if self.config.kill_switch or not self.is_trading_session_open(timestamp):
+        return self._validate_orders(
+            orders,
+            latest_prices,
+            timestamp,
+            current_quantities=current_quantities,
+            bypass_size_limits=False,
+            ignore_kill_switch=False,
+            ignore_session=False,
+        )
+
+    def validate_liquidation_orders(
+        self,
+        orders: list[OrderRequest],
+        latest_prices: dict[str, float],
+        timestamp: datetime | pd.Timestamp,
+        *,
+        current_quantities: dict[str, float] | None = None,
+    ) -> list[OrderRequest]:
+        return self._validate_orders(
+            orders,
+            latest_prices,
+            timestamp,
+            current_quantities=current_quantities,
+            bypass_size_limits=True,
+            ignore_kill_switch=True,
+            ignore_session=True,
+            liquidation=True,
+        )
+
+    def _validate_orders(
+        self,
+        orders: list[OrderRequest],
+        latest_prices: dict[str, float],
+        timestamp: datetime | pd.Timestamp,
+        *,
+        current_quantities: dict[str, float] | None,
+        bypass_size_limits: bool,
+        ignore_kill_switch: bool,
+        ignore_session: bool,
+        liquidation: bool = False,
+    ) -> list[OrderRequest]:
+        if (self.config.kill_switch and not ignore_kill_switch) or (
+            not ignore_session and not self.is_trading_session_open(timestamp)
+        ):
             return []
 
+        normalized_quantities = {symbol.upper(): quantity for symbol, quantity in (current_quantities or {}).items()}
         approved: list[OrderRequest] = []
         for order in orders:
             normalized_order = self._normalize_and_validate_order(order)
@@ -66,9 +112,15 @@ class RiskManager:
             if order.side == OrderSide.SELL_SHORT and not self.config.allow_short:
                 continue
             requested_quantity = float(order.quantity or ((order.notional or 0.0) / price))
-            max_quantity_by_notional = self.config.max_order_notional / price
-            max_quantity = min(self.config.max_position_quantity, max_quantity_by_notional)
-            quantity = min(requested_quantity, max_quantity)
+            side_cap = _side_quantity_cap(order, normalized_quantities)
+            if side_cap <= 1e-9:
+                continue
+            if bypass_size_limits:
+                max_quantity = requested_quantity
+            else:
+                max_quantity_by_notional = self.config.max_order_notional / price
+                max_quantity = min(self.config.max_position_quantity, max_quantity_by_notional)
+            quantity = min(requested_quantity, max_quantity, side_cap)
             if quantity <= 1e-9:
                 continue
 
@@ -77,6 +129,8 @@ class RiskManager:
                 "risk_max_order_notional": self.config.max_order_notional,
                 "risk_max_position_quantity": self.config.max_position_quantity,
                 "risk_reference_price": price,
+                "risk_bypassed_size_limits": bypass_size_limits,
+                "risk_liquidation_order": liquidation,
             }
             approved.append(replace(order, quantity=quantity, metadata=metadata))
         return approved
@@ -121,3 +175,14 @@ def _parse_time(value: str) -> time:
     except ValueError as exc:
         raise ValueError(f"Trading session time must use HH:MM format, got {value!r}.") from exc
     return parsed
+
+
+def _side_quantity_cap(order: OrderRequest, current_quantities: dict[str, float]) -> float:
+    if not current_quantities:
+        return float("inf")
+    current_quantity = current_quantities.get(order.symbol.upper(), 0.0)
+    if order.side == OrderSide.SELL:
+        return max(current_quantity, 0.0)
+    if order.side == OrderSide.BUY_TO_COVER:
+        return max(-current_quantity, 0.0)
+    return float("inf")

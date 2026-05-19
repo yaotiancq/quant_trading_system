@@ -77,6 +77,7 @@ class BacktestConfig(BaseModel):
     latency_bars: int = Field(default=1, ge=1)
     latency_seconds: int = Field(default=0, ge=0)
     annualization_periods: int = Field(default=252, gt=0)
+    infer_annualization_periods: bool = True
     output_dir: Path = Path("reports/backtests")
     market_order_fill: Literal["next_open", "next_close", "next_vwap", "current_close"] = "next_open"
     market_fill_price: Literal["open", "close", "hlc3", "ohlc4", "vwap"] = "open"
@@ -86,6 +87,9 @@ class BacktestConfig(BaseModel):
     max_fill_volume_pct: float = Field(default=1.0, gt=0, le=1.0)
     volume_participation_limit: float | None = None
     allow_partial_fills: bool = True
+    enforce_buying_power: bool = True
+    max_leverage: float = Field(default=1.0, gt=0)
+    allow_current_close_fill: bool = False
 
     @field_validator("market_fill_price", mode="before")
     @classmethod
@@ -106,6 +110,11 @@ class BacktestConfig(BaseModel):
             "next_vwap": "vwap",
             "current_close": "close",
         }
+        if self.market_order_fill == "current_close" and not self.allow_current_close_fill:
+            raise ValueError(
+                "market_order_fill=current_close is disabled because strategies generate orders after the current bar. "
+                "Use next_open, next_close, or next_vwap for strict backtests."
+            )
         if "market_order_fill" in self.model_fields_set:
             self.market_fill_price = mapping[self.market_order_fill]
         if self.volume_participation_limit is not None:

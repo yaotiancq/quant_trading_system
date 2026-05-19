@@ -25,9 +25,14 @@ Date: 2026-05-18
 - Signals are generated after the current bar is known.
 - Orders fill no earlier than a later bar based on `latency_bars`.
 - Market orders default to the next eligible bar open, with configurable alternatives such as close, HLC3, OHLC4, and VWAP.
-- Limit, stop, stop-limit, and trailing-stop orders are simulated from OHLCV bars using explicit touch/trigger assumptions.
+- `market_order_fill=current_close` is disabled by default because strategies generate orders after the current bar is known.
+- Limit, stop, stop-limit, and trailing-stop orders are simulated from OHLCV bars using explicit intrabar path touch/trigger assumptions.
+- Stop-limit orders cannot use a high or low that appears before the configured path triggers the stop.
 - Fills use the selected raw fill price adjusted by basis-point slippage and per-share commission.
 - Pending delayed orders are counted when planning new target deltas.
+- Reversal targets are split into explicit close/open order legs so side semantics remain broker-like.
+- Open orders are expired at the end of a backtest so reports do not leave simulated orders in ambiguous accepted states.
+- Intraday metrics infer annualization from timestamp spacing by default.
 - Backtest results are simulations and are not evidence of future profitability.
 
 ## Risk Assumptions
@@ -35,6 +40,8 @@ Date: 2026-05-18
 - Risk controls operate before simulated or paper-trading order submission.
 - Target controls cap gross exposure, per-symbol exposure, and position notional.
 - Order controls cap single-order notional and quantity.
+- Liquidation orders from max-loss or kill-switch handling bypass normal order-size caps so they can flatten complete positions.
+- `SELL`, `SELL_SHORT`, `BUY_TO_COVER`, and `BUY` have strict side semantics based on current effective position quantities.
 - The daily loss guard halts new entries and targets open positions flat in backtests.
 - The kill switch blocks new orders and forces flat targets in backtests.
 

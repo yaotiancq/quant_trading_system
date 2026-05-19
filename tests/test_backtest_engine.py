@@ -126,6 +126,50 @@ def test_backtest_market_order_fills_on_next_bar_open() -> None:
     assert "accepted" in set(result.order_events["status"])
 
 
+def test_backtest_engine_expires_open_orders_at_end() -> None:
+    class FarLimitStrategy:
+        name = "far_limit"
+
+        def generate_orders(self, history: pd.DataFrame, timestamp: pd.Timestamp, broker: object) -> list[OrderRequest]:
+            if broker.get_open_orders() or not broker.latest_prices:
+                return []
+            return [
+                OrderRequest(
+                    timestamp=timestamp.to_pydatetime(),
+                    symbol="SPY",
+                    side=OrderSide.BUY,
+                    quantity=10,
+                    order_type="limit",
+                    limit_price=50,
+                    time_in_force="gtc",
+                )
+            ]
+
+    rows = []
+    for index in range(2):
+        rows.append(
+            {
+                "timestamp": pd.Timestamp("2024-01-02T14:30:00Z") + pd.Timedelta(minutes=index),
+                "symbol": "SPY",
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.0,
+                "volume": 10_000,
+            }
+        )
+    data = normalize_market_data(pd.DataFrame(rows))
+
+    result = BacktestEngine(
+        BacktestConfig(initial_cash=10_000, latency_bars=1),
+        FarLimitStrategy(),
+        RiskManager(RiskConfig(max_position_notional=10_000)),
+    ).run(data)
+
+    assert result.orders.iloc[0]["status"] == "expired"
+    assert result.orders.iloc[0]["status_reason"] == "end_of_backtest"
+
+
 def _fill(
     fill_id: str,
     order_id: str,

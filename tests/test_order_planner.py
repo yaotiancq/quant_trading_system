@@ -154,3 +154,39 @@ def test_plan_orders_supports_limit_order_offsets() -> None:
     assert orders[0].order_type == "limit"
     assert orders[0].time_in_force == "gtc"
     assert orders[0].limit_price == 99.9
+
+
+def test_plan_orders_splits_long_to_short_reversal() -> None:
+    timestamp = pd.Timestamp("2024-01-02T14:30:00Z")
+    targets = [TargetPosition(timestamp=timestamp.to_pydatetime(), symbol="SPY", target_fraction=-0.5)]
+
+    orders = plan_orders_from_targets(
+        targets=targets,
+        equity=10_000,
+        current_quantities={"SPY": 20},
+        latest_prices={"SPY": 100},
+        timestamp=timestamp,
+        max_position_notional=10_000,
+    )
+
+    assert [order.side for order in orders] == ["sell", "sell_short"]
+    assert [order.quantity for order in orders] == [20, 50]
+    assert [order.metadata["order_leg"] for order in orders] == ["close_long", "open_short"]
+
+
+def test_plan_orders_splits_short_to_long_reversal() -> None:
+    timestamp = pd.Timestamp("2024-01-02T14:30:00Z")
+    targets = [TargetPosition(timestamp=timestamp.to_pydatetime(), symbol="SPY", target_fraction=0.25)]
+
+    orders = plan_orders_from_targets(
+        targets=targets,
+        equity=10_000,
+        current_quantities={"SPY": -15},
+        latest_prices={"SPY": 100},
+        timestamp=timestamp,
+        max_position_notional=10_000,
+    )
+
+    assert [order.side for order in orders] == ["buy_to_cover", "buy"]
+    assert [order.quantity for order in orders] == [15, 25]
+    assert [order.metadata["order_leg"] for order in orders] == ["close_short", "open_long"]

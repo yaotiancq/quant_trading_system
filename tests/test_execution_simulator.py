@@ -84,3 +84,39 @@ def test_trailing_stop_tracks_high_water_mark_and_triggers() -> None:
     assert fill.has_fill
     assert fill.fill_price == 103
     assert fill.trail_hwm == 105
+
+
+def test_stop_limit_does_not_use_limit_touch_before_stop_trigger() -> None:
+    simulator = BarExecutionSimulator(BacktestConfig(intrabar_price_path="open_low_high_close"))
+    order = OrderRequest(
+        pd.Timestamp("2024-01-02T14:30:00Z").to_pydatetime(),
+        "SPY",
+        "buy",
+        10,
+        order_type="stop_limit",
+        stop_price=104,
+        limit_price=100,
+    )
+
+    fill = simulator.simulate(order, _bar(open_=101, high=105, low=99, close=101))
+
+    assert not fill.has_fill
+    assert fill.reason == "stop_limit_not_executable"
+
+
+def test_stop_limit_can_fill_after_trigger_on_configured_path() -> None:
+    simulator = BarExecutionSimulator(BacktestConfig(intrabar_price_path="open_high_low_close"))
+    order = OrderRequest(
+        pd.Timestamp("2024-01-02T14:30:00Z").to_pydatetime(),
+        "SPY",
+        "buy",
+        10,
+        order_type="stop_limit",
+        stop_price=104,
+        limit_price=100,
+    )
+
+    fill = simulator.simulate(order, _bar(open_=101, high=105, low=99, close=101))
+
+    assert fill.has_fill
+    assert fill.fill_price == 100

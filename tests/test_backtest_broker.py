@@ -96,3 +96,37 @@ def test_simulated_broker_respects_latency_seconds() -> None:
     assert len(filled) == 1
     assert filled[0].raw_fill_price == 102
     assert broker.get_order_status(record.order_id) == OrderStatus.FILLED
+
+
+def test_simulated_broker_rejects_buy_without_cash() -> None:
+    broker = SimulatedBroker(BacktestConfig(initial_cash=1_000, latency_bars=1, enforce_buying_power=True))
+    submitted_at = pd.Timestamp("2024-01-02T14:30:00Z")
+    broker.latest_prices["SPY"] = 100.0
+    broker.set_clock(submitted_at, bar_index=0)
+
+    record = broker.submit_order(OrderRequest(submitted_at.to_pydatetime(), "SPY", "buy", 20))
+
+    assert broker.get_order_status(record.order_id) == OrderStatus.REJECTED
+    assert broker.order_log().iloc[0]["status_reason"] == "insufficient_cash"
+
+
+def test_simulated_broker_finalizes_open_orders_at_end_of_backtest() -> None:
+    broker = SimulatedBroker(BacktestConfig(latency_bars=1))
+    submitted_at = pd.Timestamp("2024-01-02T14:30:00Z")
+    order = OrderRequest(
+        submitted_at.to_pydatetime(),
+        "SPY",
+        "buy",
+        10,
+        order_type="limit",
+        time_in_force="gtc",
+        limit_price=50,
+    )
+
+    broker.set_clock(submitted_at, bar_index=0)
+    record = broker.submit_order(order)
+    broker.process_bar(pd.Timestamp("2024-01-02T14:31:00Z"), bar_index=1, bars=_bars(low=90))
+    broker.finalize(pd.Timestamp("2024-01-02T14:31:00Z"))
+
+    assert broker.get_order_status(record.order_id) == OrderStatus.EXPIRED
+    assert broker.order_log().iloc[0]["status_reason"] == "end_of_backtest"

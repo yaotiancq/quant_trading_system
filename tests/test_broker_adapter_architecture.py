@@ -115,6 +115,7 @@ def test_backtest_engine_submits_only_risk_checked_orders(monkeypatch: pytest.Mo
             orders: list[OrderRequest],
             latest_prices: dict[str, float],
             timestamp: pd.Timestamp,
+            **_: object,
         ) -> list[OrderRequest]:
             sequence.append("risk")
             return [

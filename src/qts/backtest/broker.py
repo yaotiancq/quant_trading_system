@@ -97,6 +97,7 @@ class BacktestBroker:
         self._sequence += 1
         order_id = order.order_id or f"BT-{self._sequence:08d}"
         order = replace(order, order_id=order_id)
+        status, reason = self._acceptance_status(order)
         record = BacktestOrder(
             order_id=order_id,
             request=order,
@@ -104,11 +105,14 @@ class BacktestBroker:
             submitted_index=self.current_bar_index,
             ready_index=self.current_bar_index + max(self.config.latency_bars, 0),
             ready_at=self._ready_at(),
-            status=OrderStatus.ACCEPTED,
-            status_reason="accepted",
+            status=status,
+            status_reason=reason,
         )
-        record.history[-1]["status"] = OrderStatus.ACCEPTED.value
-        record.history[-1]["reason"] = "accepted"
+        record.history[-1]["status"] = status.value
+        record.history[-1]["reason"] = reason
+        if status == OrderStatus.REJECTED:
+            record.remaining_quantity = 0.0
+            record.history[-1]["remaining_quantity"] = 0.0
         self.orders[order_id] = record
         return record
 
@@ -150,6 +154,15 @@ class BacktestBroker:
             for position in self.get_positions()
         )
         return gross / equity
+
+    def position_quantities(self) -> dict[str, float]:
+        return {position.symbol: position.qty for position in self.get_positions()}
+
+    def effective_position_quantities(self) -> dict[str, float]:
+        quantities = self.position_quantities()
+        for symbol, quantity in self.open_order_quantities().items():
+            quantities[symbol] = quantities.get(symbol, 0.0) + quantity
+        return quantities
 
     def flatten_orders(self, timestamp: pd.Timestamp) -> list[OrderRequest]:
         orders: list[OrderRequest] = []
@@ -268,6 +281,9 @@ class BacktestBroker:
             "commission_bps": self.config.commission_bps,
             "fixed_commission": self.config.fixed_commission,
             "latency_bars": self.config.latency_bars,
+            "latency_seconds": self.config.latency_seconds,
+            "enforce_buying_power": self.config.enforce_buying_power,
+            "max_leverage": self.config.max_leverage,
         }
 
     def _with_quantity_and_order_id(self, order: OrderRequest) -> OrderRequest:
@@ -366,6 +382,12 @@ class BacktestBroker:
             }
         )
 
+    def finalize(self, timestamp: pd.Timestamp | datetime | None = None) -> None:
+        final_timestamp = self._now() if timestamp is None else pd.Timestamp(timestamp)
+        for record in self.get_open_orders():
+            record.remaining_quantity = 0.0
+            record.transition(final_timestamp, OrderStatus.EXPIRED, "end_of_backtest")
+
     def _handle_unfilled(self, record: BacktestOrder, simulated: SimulatedFill) -> None:
         order = record.request
         if simulated.status == "cancelled" or order.time_in_force in {"ioc", "fok", "opg", "cls"}:
@@ -387,6 +409,63 @@ class BacktestBroker:
 
     def _before_ready_time(self, record: BacktestOrder) -> bool:
         return record.ready_at is not None and self._now() < record.ready_at
+
+    def _acceptance_status(self, order: OrderRequest) -> tuple[OrderStatus, str]:
+        if order.metadata.get("risk_liquidation_order"):
+            return OrderStatus.ACCEPTED, "accepted"
+        side_error = self._side_semantics_error(order)
+        if side_error:
+            return OrderStatus.REJECTED, side_error
+        buying_power_error = self._buying_power_error(order)
+        if buying_power_error:
+            return OrderStatus.REJECTED, buying_power_error
+        return OrderStatus.ACCEPTED, "accepted"
+
+    def _side_semantics_error(self, order: OrderRequest) -> str | None:
+        current_quantity = self.effective_position_quantities().get(order.symbol, 0.0)
+        quantity = float(order.quantity or 0.0)
+        if order.side == OrderSide.SELL and (current_quantity <= 0 or quantity > current_quantity + 1e-9):
+            return "sell_would_open_or_increase_short"
+        if order.side == OrderSide.BUY_TO_COVER and (current_quantity >= 0 or quantity > abs(current_quantity) + 1e-9):
+            return "buy_to_cover_would_open_or_increase_long"
+        return None
+
+    def _buying_power_error(self, order: OrderRequest) -> str | None:
+        if not self.config.enforce_buying_power:
+            return None
+        notional = self._estimated_notional(order)
+        if notional is None:
+            return None
+        estimated_commission = self.execution.commission(float(order.quantity or 0.0), notional / float(order.quantity or 1.0))
+        if order.side in {OrderSide.BUY, OrderSide.BUY_TO_COVER} and notional + estimated_commission > self.portfolio.cash + 1e-9:
+            return "insufficient_cash"
+        projected_gross = self._projected_gross_notional(order, notional)
+        equity = self.get_equity()
+        if equity > 0 and projected_gross > equity * self.config.max_leverage + 1e-9:
+            return "insufficient_buying_power"
+        return None
+
+    def _estimated_notional(self, order: OrderRequest) -> float | None:
+        if order.notional is not None:
+            return float(order.notional)
+        if order.quantity is None:
+            return None
+        price = self._estimated_price(order)
+        return None if price is None else float(order.quantity) * price
+
+    def _estimated_price(self, order: OrderRequest) -> float | None:
+        for price in (order.limit_price, order.stop_price, self.latest_prices.get(order.symbol)):
+            if price is not None and float(price) > 0:
+                return float(price)
+        return None
+
+    def _projected_gross_notional(self, order: OrderRequest, notional: float) -> float:
+        projected = self.effective_position_quantities()
+        signed_quantity = float(order.quantity or 0.0)
+        if order.side in {OrderSide.SELL, OrderSide.SELL_SHORT}:
+            signed_quantity *= -1
+        projected[order.symbol] = projected.get(order.symbol, 0.0) + signed_quantity
+        return sum(abs(quantity * self.latest_prices.get(symbol, self._estimated_price(order) or 0.0)) for symbol, quantity in projected.items())
 
 
 SimulatedBroker = BacktestBroker

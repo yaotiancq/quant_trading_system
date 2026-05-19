@@ -65,10 +65,21 @@ class BacktestEngine:
 
             if risk_halted or self.risk_manager.config.kill_switch:
                 orders = broker.flatten_orders(pd.Timestamp(timestamp))
+                orders = self.risk_manager.validate_liquidation_orders(
+                    orders,
+                    broker.latest_prices,
+                    pd.Timestamp(timestamp),
+                    current_quantities=broker.effective_position_quantities(),
+                )
             else:
                 history = data[data["timestamp"] <= timestamp]
                 orders = self.strategy.generate_orders(history, pd.Timestamp(timestamp), broker)
-            orders = self.risk_manager.validate_orders(orders, broker.latest_prices, pd.Timestamp(timestamp))
+                orders = self.risk_manager.validate_orders(
+                    orders,
+                    broker.latest_prices,
+                    pd.Timestamp(timestamp),
+                    current_quantities=broker.effective_position_quantities(),
+                )
             for order in orders:
                 broker.submit_order(order)
 
@@ -87,9 +98,18 @@ class BacktestEngine:
                 }
             )
 
+        if timestamps:
+            broker.finalize(pd.Timestamp(timestamps[-1]))
+            if equity_rows:
+                equity_rows[-1]["open_orders"] = broker.open_order_count()
         equity_curve = pd.DataFrame(equity_rows)
         trades = broker.trade_log()
-        metrics = calculate_performance_metrics(equity_curve, trades, self.config.annualization_periods)
+        metrics = calculate_performance_metrics(
+            equity_curve,
+            trades,
+            self.config.annualization_periods,
+            infer_periods=self.config.infer_annualization_periods,
+        )
         return BacktestResult(
             equity_curve=equity_curve,
             trades=trades,

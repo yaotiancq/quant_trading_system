@@ -16,6 +16,8 @@ The backtest engine is bar-by-bar and event-driven enough for lightweight resear
 - Applies slippage in basis points after the raw simulated fill price is chosen.
 - Applies per-share commissions.
 - Supports simple partial fills through `max_fill_volume_pct`.
+- Rejects orders that violate explicit side semantics, such as a `SELL` that would open a short or a `BUY_TO_COVER` that would open a long.
+- Applies simple buying-power and max-leverage checks before accepting orders.
 - Tracks cash, positions, market value, and equity.
 - Generates `OrderRequest` objects from strategy logic using only current and past data plus broker/account state.
 - Converts signal targets into orders through the shared execution order planner inside the strategy.
@@ -32,12 +34,13 @@ Trade logs preserve signal attribution fields from the originating `TradingSigna
 The backtest is order-driven:
 
 1. Strategy output is converted into broker-neutral `OrderRequest` objects.
-2. Risk checks validate order type, time in force, session, notional, and quantity.
+2. Risk checks validate order type, time in force, session, notional, quantity, side semantics, and liquidation exceptions.
 3. The simulated broker accepts orders and assigns backtest order IDs.
 4. Orders become eligible after `latency_bars` and, when configured, `latency_seconds`.
 5. The execution simulator returns zero, partial, or full fill events.
 6. The portfolio applies `FillEvent` objects and updates accounting.
-7. The broker updates order status to `accepted`, `partially_filled`, `filled`, `canceled`, or `expired`.
+7. The broker updates order status to `accepted`, `partially_filled`, `filled`, `canceled`, `rejected`, or `expired`.
+8. Any open orders remaining at the final backtest timestamp are expired with reason `end_of_backtest`.
 
 Report artifacts include `orders.csv` for final order state and `order_events.csv` for status transition history.
 
@@ -69,12 +72,16 @@ By default, strategy signals are generated after bar N is available, then market
 
 OHLCV bars cannot reveal the actual sequence of trades inside a bar, queue priority, spread, or displayed depth. Limit, stop, stop-limit, and trailing-stop orders therefore use explicit bar-level assumptions:
 
-- A buy limit can fill when the bar low touches the limit; a sell limit can fill when the bar high touches the limit.
+- A buy limit can fill only when the configured intrabar path reaches or crosses the limit; a sell limit follows the same rule in the opposite direction.
 - Stops trigger when the bar trades through the stop, with gap handling at the open.
-- Stop-limit orders must both trigger and be executable at the limit.
+- Stop-limit orders must both trigger and then become executable at the limit according to the configured intrabar path. A pre-trigger high or low is not reused as a post-trigger fill.
 - Trailing stops track a high-water mark for sell orders and a low-water mark for buy orders.
 - `intrabar_price_path` controls whether ambiguous bars are interpreted as `open_high_low_close` or `open_low_high_close`.
 - `max_fill_volume_pct` caps simulated fills as a fraction of the bar volume.
+- Reversal orders are split into explicit close and open legs, such as `SELL` then `SELL_SHORT`, or `BUY_TO_COVER` then `BUY`.
+- Risk liquidation orders created by the daily-loss guard or kill switch bypass normal max-order-size caps so they can flatten the whole position.
+- `market_order_fill: current_close` is rejected by default because strategies generate orders after the current bar is known. Use `next_open`, `next_close`, or `next_vwap` for strict backtests.
+- Metrics infer intraday annualization from timestamp spacing by default. Minute bars use a 252 trading day by 6.5 hour session assumption unless this behavior is disabled in config.
 
 `latency_bars` must be at least `1`, because strategy signals are generated after the current bar is available. `latency_seconds` can add an additional clock-time delay for intraday or second-level bars. Queue position, spread dynamics, borrow availability, margin calls, corporate actions, and exchange-specific microstructure are still not modeled.
 

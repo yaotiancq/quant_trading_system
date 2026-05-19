@@ -25,6 +25,7 @@ The project is a working lightweight research/backtesting MVP for local quantita
 - Added `AlpacaPaperBroker` and a disabled-by-default `AlpacaLiveBroker` guard.
 - Added strategy config order defaults and dynamic limit/stop price offsets.
 - Updated diagnostic charts to show order submissions, buy/sell/short/cover fills, partial fills, and raw-vs-slipped fill prices.
+- Tightened backtest correctness by splitting reversal targets into close/open legs, enforcing strict order-side semantics, adding liquidation-specific risk validation, path-aware stop-limit simulation, end-of-backtest order expiration, buying-power checks, disabled current-close fills, and timestamp-aware metric annualization.
 - Added safe paper-trading dry-run behavior that does not require credentials or network access unless `--connect` is requested.
 - Added summary report output.
 - Added tests for validation, features, metrics, risk, signal combination, and existing core workflows.
@@ -82,7 +83,7 @@ Last run in the repository virtual environment:
 .venv/bin/python scripts/train_model.py --config configs/backtest.yaml passed.
 .venv/bin/python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-run passed without Alpaca credentials or network connection.
 .venv/bin/python -m pytest
-53 passed
+64 passed
 ```
 
 Package created at `/tmp/quant_trading_system_order_driven.zip`. The archive excludes `.env`, `.git`, `.venv`, caches, egg-info, and Alpaca data partitions.
@@ -90,8 +91,8 @@ Package created at `/tmp/quant_trading_system_order_driven.zip`. The archive exc
 ## Known Limitations
 
 - Backtests are order-driven with an explicit shared-interface `BacktestBroker`, execution simulator, and portfolio accounting module.
-- Backtest fills are OHLCV bar simulations with configurable latency, market fill price, slippage, commissions, partial fills, and basic order-type behavior.
-- Queue priority, spread dynamics, borrow availability, margin constraints, corporate actions, and exchange microstructure are not modeled.
+- Backtest fills are OHLCV bar simulations with configurable latency, market fill price, slippage, commissions, partial fills, path-aware order-type behavior, and simple buying-power checks.
+- Queue priority, spread dynamics, borrow availability, detailed margin rules, corporate actions, and exchange microstructure are not modeled.
 - The paper-trading loop is a safe dry-run/connectivity scaffold. The Alpaca paper broker shares the same order interface, but autonomous recent-bar polling and order submission remain future work.
 - Alpaca live trading is disabled by default and has not been tested with live credentials.
 - Second-level bars are supported when normalized local data is available; this is not high-frequency trading infrastructure.

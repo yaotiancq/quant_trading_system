@@ -62,3 +62,27 @@ def test_risk_manager_rejects_unsupported_order_type_tif_combo() -> None:
     )
 
     assert manager.validate_orders([order], {"SPY": 100.0}, timestamp) == []
+
+
+def test_risk_manager_caps_sell_to_existing_long_when_shorts_disabled() -> None:
+    timestamp = pd.Timestamp("2024-01-02T14:30:00Z")
+    manager = RiskManager(RiskConfig(allow_short=False, max_order_notional=100_000, max_position_quantity=100_000))
+    order = OrderRequest(timestamp.to_pydatetime(), "SPY", "sell", 25)
+
+    approved = manager.validate_orders([order], {"SPY": 100.0}, timestamp, current_quantities={"SPY": 10})
+
+    assert len(approved) == 1
+    assert approved[0].quantity == 10
+
+
+def test_risk_manager_liquidation_orders_bypass_size_limits_and_kill_switch() -> None:
+    timestamp = pd.Timestamp("2024-01-02T14:30:00Z")
+    manager = RiskManager(RiskConfig(kill_switch=True, max_order_notional=10, max_position_quantity=1))
+    order = OrderRequest(timestamp.to_pydatetime(), "SPY", "sell", 25, metadata={"reason": "risk_flatten"})
+
+    approved = manager.validate_liquidation_orders([order], {"SPY": 100.0}, timestamp, current_quantities={"SPY": 25})
+
+    assert len(approved) == 1
+    assert approved[0].quantity == 25
+    assert approved[0].metadata["risk_liquidation_order"] is True
+    assert approved[0].metadata["risk_bypassed_size_limits"] is True

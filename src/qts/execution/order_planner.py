@@ -44,39 +44,40 @@ def plan_orders_from_targets(
         if abs(delta_quantity) <= min_quantity:
             continue
 
-        side = _order_side_for_delta(delta_quantity, current_quantity)
-        limit_price = _optional_float(target.metadata.get("limit_price"))
-        stop_price = _optional_float(target.metadata.get("stop_price"))
-        if limit_price is None:
-            limit_price = _offset_price(target.metadata.get("limit_price_offset_bps"), price, side, price_type="limit")
-        if stop_price is None:
-            stop_price = _offset_price(target.metadata.get("stop_price_offset_bps"), price, side, price_type="stop")
+        for side, quantity, leg in _order_legs(current_quantity, desired_quantity, min_quantity):
+            limit_price = _optional_float(target.metadata.get("limit_price"))
+            stop_price = _optional_float(target.metadata.get("stop_price"))
+            if limit_price is None:
+                limit_price = _offset_price(target.metadata.get("limit_price_offset_bps"), price, side, price_type="limit")
+            if stop_price is None:
+                stop_price = _offset_price(target.metadata.get("stop_price_offset_bps"), price, side, price_type="stop")
 
-        orders.append(
-            OrderRequest(
-                timestamp=order_timestamp,
-                symbol=symbol,
-                side=side,
-                quantity=abs(delta_quantity),
-                order_type=str(target.metadata.get("order_type", "market")),
-                time_in_force=str(target.metadata.get("time_in_force", "day")),
-                limit_price=limit_price,
-                stop_price=stop_price,
-                trail_price=_optional_float(target.metadata.get("trail_price")),
-                trail_percent=_optional_float(target.metadata.get("trail_percent")),
-                extended_hours=bool(target.metadata.get("extended_hours", False)),
-                order_class=str(target.metadata["order_class"]) if target.metadata.get("order_class") else None,
-                strategy_id=str(target.metadata.get("strategy_id", strategy_id)) if target.metadata.get("strategy_id", strategy_id) else None,
-                metadata={
-                    "target_fraction": target.target_fraction,
-                    "target_notional": capped_notional,
-                    "current_quantity": current_quantity,
-                    "desired_quantity": desired_quantity,
-                    "reference_price": price,
-                    **_signal_order_metadata(target.metadata),
-                },
+            orders.append(
+                OrderRequest(
+                    timestamp=order_timestamp,
+                    symbol=symbol,
+                    side=side,
+                    quantity=quantity,
+                    order_type=str(target.metadata.get("order_type", "market")),
+                    time_in_force=str(target.metadata.get("time_in_force", "day")),
+                    limit_price=limit_price,
+                    stop_price=stop_price,
+                    trail_price=_optional_float(target.metadata.get("trail_price")),
+                    trail_percent=_optional_float(target.metadata.get("trail_percent")),
+                    extended_hours=bool(target.metadata.get("extended_hours", False)),
+                    order_class=str(target.metadata["order_class"]) if target.metadata.get("order_class") else None,
+                    strategy_id=str(target.metadata.get("strategy_id", strategy_id)) if target.metadata.get("strategy_id", strategy_id) else None,
+                    metadata={
+                        "target_fraction": target.target_fraction,
+                        "target_notional": capped_notional,
+                        "current_quantity": current_quantity,
+                        "desired_quantity": desired_quantity,
+                        "reference_price": price,
+                        "order_leg": leg,
+                        **_signal_order_metadata(target.metadata),
+                    },
+                )
             )
-        )
     return orders
 
 
@@ -88,10 +89,30 @@ def broker_position_quantities(positions: Iterable[object]) -> dict[str, float]:
     return quantities
 
 
-def _order_side_for_delta(delta_quantity: float, current_quantity: float) -> OrderSide:
-    if delta_quantity > 0:
-        return OrderSide.BUY_TO_COVER if current_quantity < 0 else OrderSide.BUY
-    return OrderSide.SELL if current_quantity > 0 else OrderSide.SELL_SHORT
+def _order_legs(
+    current_quantity: float,
+    desired_quantity: float,
+    min_quantity: float,
+) -> list[tuple[OrderSide, float, str]]:
+    if abs(desired_quantity - current_quantity) <= min_quantity:
+        return []
+    if current_quantity > min_quantity and desired_quantity < -min_quantity:
+        return [
+            (OrderSide.SELL, abs(current_quantity), "close_long"),
+            (OrderSide.SELL_SHORT, abs(desired_quantity), "open_short"),
+        ]
+    if current_quantity < -min_quantity and desired_quantity > min_quantity:
+        return [
+            (OrderSide.BUY_TO_COVER, abs(current_quantity), "close_short"),
+            (OrderSide.BUY, abs(desired_quantity), "open_long"),
+        ]
+    if desired_quantity > current_quantity:
+        side = OrderSide.BUY_TO_COVER if current_quantity < -min_quantity else OrderSide.BUY
+        leg = "close_short" if side == OrderSide.BUY_TO_COVER else "open_long"
+        return [(side, abs(desired_quantity - current_quantity), leg)]
+    side = OrderSide.SELL if current_quantity > min_quantity else OrderSide.SELL_SHORT
+    leg = "close_long" if side == OrderSide.SELL else "open_short"
+    return [(side, abs(desired_quantity - current_quantity), leg)]
 
 
 def _to_datetime(value: datetime | pd.Timestamp) -> datetime:

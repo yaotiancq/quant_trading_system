@@ -31,13 +31,19 @@ risk:
 backtest:
   initial_cash: 100000
   commission_per_share: 0.0
-  slippage_bps: 1.0
+  commission_bps: 0.0
+  fixed_commission: 0.0
+  slippage_bps: 2.0
   latency_bars: 1
-  market_fill_price: open
+  latency_seconds: 0
+  market_order_fill: next_open
   limit_fill_price: limit
   stop_fill_price: stop
   intrabar_price_path: open_high_low_close
-  max_fill_volume_pct: 0.1
-  allow_partial_fills: true
+  volume_participation_limit: 0.05
+  allow_partial_fills: false
+  enforce_buying_power: true
+  max_leverage: 1.0
   annualization_periods: 252
+  infer_annualization_periods: true
   output_dir: reports/ml_backtests

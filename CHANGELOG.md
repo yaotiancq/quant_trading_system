@@ -13,6 +13,13 @@
 - Added architecture tests for BrokerAdapter conformance, risk-before-submit ordering, fill-event-only portfolio updates, and live broker safety.
 - Updated documentation to explain the mode-independent execution flow.
 - Updated charting to visualize order submissions, buy/sell/short/cover fills, partial fills, and raw-vs-slipped fill prices.
+- Split reversal targets into explicit close/open order legs.
+- Added strict order-side validation so `SELL` and `BUY_TO_COVER` cannot accidentally open opposite-side positions.
+- Added liquidation-specific risk validation that bypasses normal order-size caps for max-loss and kill-switch flattening.
+- Made limit, stop, and stop-limit fills respect the configured intrabar price path.
+- Added end-of-backtest expiration for remaining open orders.
+- Added simple buying-power and max-leverage checks to the simulated broker.
+- Disabled `current_close` market fills by default and added timeframe-aware metric annualization.
 
 ## 2026-05-17
 

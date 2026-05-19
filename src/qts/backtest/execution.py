@@ -138,59 +138,90 @@ class BarExecutionSimulator:
         if order.limit_price is None:
             return None
         limit = float(order.limit_price)
-        if tif == "opg":
-            price = float(bar["open"])
-            return price if _limit_accepts(order.side, price, limit) else None
-        if tif == "cls":
-            price = float(bar["close"])
-            return price if _limit_accepts(order.side, price, limit) else None
-
-        touched = float(bar["low"]) <= limit if _is_buy_side(order.side) else float(bar["high"]) >= limit
-        if not touched:
-            return None
-        open_price = float(bar["open"])
-        if _limit_accepts(order.side, open_price, limit):
-            return open_price
-        if self.config.limit_fill_price == "touch":
-            return limit
-        if self.config.limit_fill_price == "midpoint":
-            if _is_buy_side(order.side):
-                return min(limit, (open_price + float(bar["low"])) / 2.0)
-            return max(limit, (open_price + float(bar["high"])) / 2.0)
-        return limit
+        previous_price = None
+        for index, price in enumerate(self._price_path(bar, tif)):
+            if _limit_accepts(order.side, price, limit):
+                if index == 0:
+                    return price
+                return self._limit_touch_price(order.side, limit, previous_price, price)
+            previous_price = price
+        return None
 
     def _stop_price(self, order: OrderRequest, bar: pd.Series, tif: str) -> float | None:
         if order.stop_price is None:
             return None
         stop = float(order.stop_price)
-        trigger_price = self._stop_trigger_price(order.side, stop, bar, tif)
-        if trigger_price is None:
+        trigger = self._first_stop_trigger(order.side, stop, self._price_path(bar, tif))
+        if trigger is None:
             return None
+        trigger_price, index = trigger
         if self.config.stop_fill_price == "market":
-            market_price = self._market_price(bar, tif)
-            return max(stop, market_price) if _is_buy_side(order.side) else min(stop, market_price)
-        return trigger_price
+            return trigger_price
+        if index == 0:
+            return trigger_price
+        return stop
 
     def _stop_limit_price(self, order: OrderRequest, bar: pd.Series, tif: str) -> float | None:
         if order.stop_price is None or order.limit_price is None:
             return None
         stop = float(order.stop_price)
         limit = float(order.limit_price)
-        trigger_price = self._stop_trigger_price(order.side, stop, bar, tif)
-        if trigger_price is None:
-            return None
+        path = self._price_path(bar, tif)
+        triggered = False
+        previous_price = None
+        for index, price in enumerate(path):
+            if not triggered:
+                trigger = self._stop_trigger_at_path_price(order.side, stop, price, index)
+                if trigger is None:
+                    previous_price = price
+                    continue
+                triggered = True
+                trigger_price = trigger
+                if _limit_accepts(order.side, trigger_price, limit):
+                    return trigger_price
+                previous_price = trigger_price
+                continue
+            if _limit_accepts(order.side, price, limit):
+                return self._limit_touch_price(order.side, limit, previous_price, price)
+            previous_price = price
+        return None
 
-        if _is_buy_side(order.side):
-            if trigger_price <= limit:
-                return trigger_price
-            if float(bar["low"]) <= limit:
-                return limit
-            return None
-
-        if trigger_price >= limit:
-            return trigger_price
-        if float(bar["high"]) >= limit:
+    def _limit_touch_price(
+        self,
+        side: OrderSide | str,
+        limit: float,
+        previous_price: float | None,
+        touch_price: float,
+    ) -> float:
+        if self.config.limit_fill_price == "touch":
             return limit
+        if self.config.limit_fill_price == "midpoint" and previous_price is not None:
+            return min(limit, (previous_price + touch_price) / 2.0) if _is_buy_side(side) else max(limit, (previous_price + touch_price) / 2.0)
+        return limit
+
+    def _first_stop_trigger(
+        self,
+        side: OrderSide | str,
+        stop: float,
+        path: list[float],
+    ) -> tuple[float, int] | None:
+        for index, price in enumerate(path):
+            trigger_price = self._stop_trigger_at_path_price(side, stop, price, index)
+            if trigger_price is not None:
+                return trigger_price, index
+        return None
+
+    def _stop_trigger_at_path_price(
+        self,
+        side: OrderSide | str,
+        stop: float,
+        price: float,
+        index: int,
+    ) -> float | None:
+        if _is_buy_side(side) and price >= stop:
+            return max(stop, price) if index == 0 else stop
+        if _is_sell_side(side) and price <= stop:
+            return min(stop, price) if index == 0 else stop
         return None
 
     def _trailing_stop_price(

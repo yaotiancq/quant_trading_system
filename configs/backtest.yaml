@@ -46,7 +46,10 @@ backtest:
   intrabar_price_path: open_high_low_close
   volume_participation_limit: 0.05
   allow_partial_fills: false
+  enforce_buying_power: true
+  max_leverage: 1.0
   annualization_periods: 252
+  infer_annualization_periods: true
   output_dir: reports/backtests
 execution:
   mode: backtest

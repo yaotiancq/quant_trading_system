@@ -99,6 +99,9 @@ backtest:
   intrabar_price_path: open_high_low_close
   volume_participation_limit: 0.05
   allow_partial_fills: false
+  enforce_buying_power: true
+  max_leverage: 1.0
+  infer_annualization_periods: true
 execution:
   mode: backtest
   broker: backtest
@@ -114,7 +117,7 @@ Important assumptions such as slippage, commissions, latency, exposure limits, a
 
 `latency_bars` must be at least `1`. The engine assumes signals are generated after the current bar is known and orders fill no earlier than a later bar. This avoids same-bar close-to-close look-ahead behavior.
 
-The default market-order simulation fills at the next eligible bar open, not the signal bar close. You can change `market_order_fill` to `next_close`, `next_vwap`, or `current_close` for sensitivity analysis. `current_close` is intentionally not the default because it can be optimistic.
+The default market-order simulation fills at the next eligible bar open, not the signal bar close. You can change `market_order_fill` to `next_close` or `next_vwap` for sensitivity analysis. `current_close` is rejected by default because this engine generates orders after the current bar is known.
 
 Loaded timestamps default to Pacific Time through `timezone: America/Los_Angeles`. The aliases `PT`, `PST`, and `PDT` are accepted and normalized to `America/Los_Angeles`. Raw timestamps with an explicit timezone, such as `Z`/UTC Alpaca timestamps, are converted to the configured timezone. Naive timestamps are treated the same way pandas treats them during UTC normalization, so prefer timezone-aware raw data.
 

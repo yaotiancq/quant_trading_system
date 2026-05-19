@@ -32,6 +32,11 @@ def test_backtest_config_rejects_zero_latency() -> None:
         BacktestConfig(latency_bars=0)
 
 
+def test_backtest_config_rejects_current_close_fill_by_default() -> None:
+    with pytest.raises(ValidationError):
+        BacktestConfig(market_order_fill="current_close")
+
+
 def test_env_settings_accept_required_alpaca_names(monkeypatch) -> None:
     monkeypatch.setenv("ALPACA_API_KEY", "key")
     monkeypatch.setenv("ALPACA_SECRET_KEY", "secret")
