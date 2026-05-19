@@ -5,6 +5,7 @@ Date: 2026-05-18
 ## Architecture Decisions
 
 - Keep the project as a lightweight Python package with CLI scripts. No web dashboard, scheduler, queue, or distributed infrastructure is included.
+- Use one unified YAML config file with named profiles for mode, data, strategy, risk, backtest, execution, and broker settings. CLI scripts resolve profiles into the same typed `AppConfig` object so modes stay consistent without maintaining separate YAML files.
 - The system uses an order-driven BrokerAdapter architecture so that backtesting, paper trading, and future live trading share the same strategy-to-order workflow. Strategies produce OrderRequest objects. Broker implementations differ by mode, but strategy logic remains mode-independent.
 - Treat rule-based and ML signals as equal first-class providers through the `TradingSignal` interface.
 - Keep Alpaca-specific code isolated in data and execution adapters.

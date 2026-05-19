@@ -12,7 +12,7 @@ from qts.strategies.signal_strategy import create_strategy_from_config
 
 
 def _sample_result():
-    config = load_app_config("configs/backtest.yaml")
+    config = load_app_config("configs/config.yaml")
     data = load_market_data(config.data)
     strategy = create_strategy_from_config(config.strategy)
     result = BacktestEngine(config.backtest, strategy, RiskManager(config.risk)).run(data)

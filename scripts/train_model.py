@@ -11,7 +11,8 @@ from qts.utils.logging import configure_logging, get_logger
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train a baseline logistic regression signal model.")
-    parser.add_argument("--config", default="configs/backtest.yaml")
+    parser.add_argument("--config", default="configs/config.yaml")
+    parser.add_argument("--data-profile", default=None)
     parser.add_argument("--output", default="models/baseline_logistic.joblib")
     parser.add_argument("--horizon", type=int, default=1)
     parser.add_argument("--threshold", type=float, default=0.0)
@@ -20,7 +21,7 @@ def main() -> None:
 
     configure_logging()
     logger = get_logger(__name__)
-    config = load_app_config(args.config)
+    config = load_app_config(args.config, profile_overrides={"mode": "research", "data": args.data_profile})
     bars = load_market_data(config.data)
     X, y, feature_columns, metadata = build_supervised_dataset(bars, horizon=args.horizon, threshold=args.threshold)
     X_train, X_test, y_train, y_test, _, _ = time_train_test_split(X, y, metadata, train_fraction=args.train_fraction)
@@ -33,4 +34,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

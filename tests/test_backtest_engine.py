@@ -13,7 +13,7 @@ from qts.strategies.signal_strategy import create_strategy_from_config
 
 
 def test_backtest_engine_runs_on_sample_data() -> None:
-    config = load_app_config("configs/backtest.yaml")
+    config = load_app_config("configs/config.yaml")
     data = load_market_data(DataConfig(data_file="data/raw/sample_bars.csv", source="local", symbols=["SPY"]))
     strategy = create_strategy_from_config(config.strategy)
     engine = BacktestEngine(config.backtest, strategy, RiskManager(config.risk))

@@ -156,3 +156,14 @@ class AppConfig(BaseModel):
     backtest: BacktestConfig = Field(default_factory=BacktestConfig)
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     broker: BrokerConfig = Field(default_factory=BrokerConfig)
+
+    @model_validator(mode="after")
+    def validate_mode_consistency(self) -> "AppConfig":
+        if self.mode in {"backtest", "paper", "live"} and self.execution.mode != self.mode:
+            raise ValueError(
+                f"App mode '{self.mode}' must use an execution profile with mode '{self.mode}', "
+                f"got '{self.execution.mode}'."
+            )
+        if self.mode == "live" and not (self.execution.live_trading_enabled and self.broker.live_trading_enabled):
+            raise ValueError("Live mode requires live_trading_enabled=true in both execution and broker config.")
+        return self

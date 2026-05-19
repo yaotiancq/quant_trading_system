@@ -6,7 +6,7 @@ The system is designed for fast strategy iteration, repeatable backtests, local 
 
 ## What Is Included
 
-- YAML configuration loading with environment-based Alpaca credentials.
+- Single-file YAML configuration with mode/profile selection and environment-based Alpaca credentials.
 - Local CSV and Parquet market data loading.
 - Deterministic sample data generation.
 - Configurable loaded-data timezone, defaulting to Pacific Time.
@@ -38,6 +38,8 @@ cp .env.example .env
 
 Fill `.env` with Alpaca credentials only when using Alpaca data or paper trading.
 
+The project uses one config file, `configs/config.yaml`. Choose active defaults in its `runtime` section or pass CLI profile overrides such as `--strategy-profile baseline_ml`, `--data-profile alpaca`, or `--risk-profile paper`.
+
 ## Generate Sample Data
 
 ```bash
@@ -55,7 +57,7 @@ pytest
 ## Run Example Backtest
 
 ```bash
-python scripts/run_backtest.py --config configs/backtest.yaml
+python scripts/run_backtest.py --config configs/config.yaml
 ```
 
 Outputs are written to `reports/backtests/`.
@@ -64,10 +66,10 @@ When charting is enabled, reports include `equity_curve.png` and `<SYMBOL>_diagn
 
 ## Download Alpaca Historical Data
 
-Set `ALPACA_API_KEY` and `ALPACA_SECRET_KEY` in `.env`, update `configs/backtest.yaml`, then run:
+Set `ALPACA_API_KEY` and `ALPACA_SECRET_KEY` in `.env`, update the `profiles.data.alpaca` section in `configs/config.yaml`, then run:
 
 ```bash
-python scripts/download_data.py --config configs/backtest.yaml
+python scripts/download_data.py --config configs/config.yaml
 ```
 
 Data is stored as partitioned Parquet under `data/raw/source=alpaca/timeframe=<timeframe>/symbol=<symbol>/bars.parquet`.
@@ -75,7 +77,7 @@ Data is stored as partitioned Parquet under `data/raw/source=alpaca/timeframe=<t
 ## Train Baseline ML Model
 
 ```bash
-python scripts/train_model.py --config configs/backtest.yaml --output models/baseline_logistic.joblib
+python scripts/train_model.py --config configs/config.yaml --output models/baseline_logistic.joblib
 ```
 
 The model uses deterministic technical features, future-return labels, a time-based split, and `joblib` persistence.
@@ -83,7 +85,7 @@ The model uses deterministic technical features, future-return labels, a time-ba
 ## Run ML Backtest
 
 ```bash
-python scripts/run_ml_backtest.py --config configs/ml_backtest.yaml --model models/baseline_logistic.joblib
+python scripts/run_ml_backtest.py --config configs/config.yaml --model models/baseline_logistic.joblib
 ```
 
 ML signals flow through the same `SignalDrivenStrategy`, risk manager, and backtest engine as rule-based signals.
@@ -91,10 +93,10 @@ ML signals flow through the same `SignalDrivenStrategy`, risk manager, and backt
 ## Run Paper Trading Dry-Run
 
 ```bash
-python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-run
+python scripts/run_paper_trading.py --config configs/config.yaml --dry-run
 ```
 
-The default paper config is `dry_run: true`. The command above validates configuration without opening an Alpaca connection or submitting orders. Use `--connect --once` when credentials are configured and you explicitly want to check Alpaca account/clock connectivity.
+The paper execution profile is `dry_run: true`. The command above validates configuration without opening an Alpaca connection or submitting orders. Use `--connect --once` when credentials are configured and you explicitly want to check Alpaca account/clock connectivity.
 
 ## Execution Architecture
 
@@ -109,7 +111,7 @@ Backtests use `BacktestBroker` and `BarExecutionSimulator`; Alpaca paper trading
 ## Repository Structure
 
 ```text
-configs/                 Example YAML configs
+configs/                 Unified YAML config
 data/raw/                Local raw market data and sample CSV
 data/processed/          Processed data and local artifacts
 docs/                    System design documentation

@@ -6,6 +6,8 @@ Date: 2026-05-18
 
 The project is a working lightweight research/backtesting MVP for local quantitative strategy research. It can generate deterministic local sample bars, load CSV or Parquet data, compute technical features, generate rule-based and ML signals through the same `TradingSignal` interface, run order-driven bar-by-bar backtests, write reports, train a baseline scikit-learn model, and validate Alpaca paper-trading configuration in dry-run mode.
 
+Configuration is now centralized in one profile-based file, `configs/config.yaml`, so local backtests, ML backtests, Alpaca downloads, paper dry-runs, and guarded live-readiness settings share the same structure.
+
 ## Completed Work
 
 - Added deterministic sample data generation with CSV and partitioned Parquet output.
@@ -23,6 +25,7 @@ The project is a working lightweight research/backtesting MVP for local quantita
 - Updated strategies to produce `OrderRequest` objects through `generate_orders(...)` instead of letting the backtest mutate positions from signals.
 - Restricted portfolio accounting to public `FillEvent` processing through `Portfolio.apply_fill_event(...)`.
 - Added `AlpacaPaperBroker` and a disabled-by-default `AlpacaLiveBroker` guard.
+- Replaced split YAML configs with one unified profile-based config and CLI profile overrides.
 - Added strategy config order defaults and dynamic limit/stop price offsets.
 - Updated diagnostic charts to show order submissions, buy/sell/short/cover fills, partial fills, and raw-vs-slipped fill prices.
 - Tightened backtest correctness by splitting reversal targets into close/open legs, enforcing strict order-side semantics, adding liquidation-specific risk validation, path-aware stop-limit simulation, end-of-backtest order expiration, buying-power checks, disabled current-close fills, and timestamp-aware metric annualization.
@@ -59,16 +62,17 @@ Major added files include:
 - `tests/test_backtest_broker.py`
 - `tests/test_broker_adapter_architecture.py`
 
-Major changed areas include config loading, data validation, feature engineering, rule-based signals, signal combining, strategy order generation, risk management, backtest execution, broker adapters, reporting, configs, README, and user manual.
+Major changed areas include config loading, the unified config file, CLI profile selection, data validation, feature engineering, rule-based signals, signal combining, strategy order generation, risk management, backtest execution, broker adapters, reporting, README, and user manual.
 
 ## Commands To Run
 
 ```bash
 pip install -e ".[dev]"
 python scripts/generate_sample_data.py
-python scripts/run_backtest.py --config configs/backtest.yaml
-python scripts/train_model.py --config configs/backtest.yaml
-python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-run
+python scripts/run_backtest.py
+python scripts/train_model.py
+python scripts/run_ml_backtest.py
+python scripts/run_paper_trading.py --dry-run
 pytest
 ```
 
@@ -79,14 +83,18 @@ Last run in the repository virtual environment:
 ```text
 .venv/bin/python -m pip install -e ".[dev]" could not complete in this sandbox because pip could not reach PyPI to install the `setuptools>=68` build dependency. Escalated network approval was requested twice and timed out. The existing virtual environment was still able to run the project and tests.
 .venv/bin/python scripts/generate_sample_data.py passed.
-.venv/bin/python scripts/run_backtest.py --config configs/backtest.yaml passed.
-.venv/bin/python scripts/train_model.py --config configs/backtest.yaml passed.
-.venv/bin/python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-run passed without Alpaca credentials or network connection.
+.venv/bin/python scripts/run_backtest.py --config configs/config.yaml --no-chart passed.
+.venv/bin/python scripts/train_model.py --config configs/config.yaml --output models/baseline_logistic.joblib passed.
+.venv/bin/python scripts/run_ml_backtest.py --config configs/config.yaml --no-chart passed.
+.venv/bin/python scripts/run_paper_trading.py --config configs/config.yaml --dry-run passed without Alpaca credentials or network connection.
+.venv/bin/python scripts/run_backtest.py --no-chart passed.
+.venv/bin/python scripts/run_ml_backtest.py --no-chart passed.
+.venv/bin/python scripts/run_paper_trading.py --dry-run passed without Alpaca credentials or network connection.
 .venv/bin/python -m pytest
-64 passed
+69 passed
 ```
 
-Package created at `/tmp/quant_trading_system_order_driven.zip`. The archive excludes `.env`, `.git`, `.venv`, caches, egg-info, and Alpaca data partitions.
+Package created at `/tmp/quant_trading_system_unified_config_source.zip`. The archive excludes `.env`, `.git`, `.venv`, caches, egg-info, and Alpaca data partitions.
 
 ## Known Limitations
 

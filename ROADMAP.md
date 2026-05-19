@@ -18,6 +18,7 @@
 - Disabled-by-default `AlpacaLiveBroker` guard.
 - Configurable market fill prices, intrabar path assumptions, and partial fills.
 - Shared order planner and risk manager.
+- Single-file profile-based configuration for backtesting, ML backtesting, Alpaca downloads, paper trading, and guarded live readiness.
 - Alpaca historical downloader and isolated broker adapter.
 - Safe paper-trading dry-run command.
 - Reports with CSV, JSON, markdown summary, and optional charts.

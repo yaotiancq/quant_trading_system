@@ -1,15 +1,82 @@
 import pytest
 from pydantic import ValidationError
 
-from qts.config.loader import EnvSettings, load_app_config
-from qts.config.models import BacktestConfig, DataConfig
+from qts.config.loader import EnvSettings, load_app_config, resolve_app_config
+from qts.config.models import AppConfig, BacktestConfig, DataConfig
 
 
 def test_load_backtest_config() -> None:
-    config = load_app_config("configs/backtest.yaml")
+    config = load_app_config("configs/config.yaml")
     assert config.mode == "backtest"
     assert config.data.symbols == ["SPY"]
+    assert config.data.source == "local"
     assert config.strategy.name == "moving_average_crossover"
+
+
+def test_unified_config_can_select_ml_profile() -> None:
+    config = load_app_config(
+        "configs/config.yaml",
+        profile_overrides={"strategy": "baseline_ml", "backtest": "ml"},
+    )
+
+    assert config.strategy.name == "baseline_ml"
+    assert str(config.backtest.output_dir) == "reports/ml_backtests"
+
+
+def test_unified_config_can_select_paper_profiles() -> None:
+    config = load_app_config(
+        "configs/config.yaml",
+        profile_overrides={
+            "mode": "paper",
+            "data": "alpaca",
+            "risk": "paper",
+            "execution": "paper",
+            "broker": "alpaca_paper",
+        },
+    )
+
+    assert config.mode == "paper"
+    assert config.data.source == "alpaca"
+    assert config.execution.mode == "paper"
+    assert config.execution.dry_run
+    assert config.broker.paper
+
+
+def test_direct_config_rejects_profile_overrides_without_profiles() -> None:
+    with pytest.raises(ValueError, match="Profile overrides require unified config profiles"):
+        resolve_app_config(
+            {
+                "mode": "backtest",
+                "data": {"symbols": ["SPY"]},
+                "strategy": {"name": "moving_average_crossover"},
+            },
+            profile_overrides={"strategy": "baseline_ml"},
+        )
+
+
+def test_config_rejects_mode_execution_mismatch() -> None:
+    with pytest.raises(ValidationError, match="must use an execution profile"):
+        AppConfig.model_validate(
+            {
+                "mode": "paper",
+                "data": {"symbols": ["SPY"]},
+                "strategy": {"name": "moving_average_crossover"},
+                "execution": {"mode": "backtest"},
+            }
+        )
+
+
+def test_live_mode_requires_explicit_live_enablement() -> None:
+    with pytest.raises(ValidationError, match="Live mode requires"):
+        AppConfig.model_validate(
+            {
+                "mode": "live",
+                "data": {"symbols": ["SPY"]},
+                "strategy": {"name": "moving_average_crossover"},
+                "execution": {"mode": "live", "live_trading_enabled": False},
+                "broker": {"paper": False, "live_trading_enabled": False},
+            }
+        )
 
 
 def test_symbols_are_normalized() -> None:

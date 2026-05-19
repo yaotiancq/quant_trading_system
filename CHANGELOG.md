@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-05-18 Unified Configuration
+
+- Replaced split backtest, ML backtest, and paper-trading YAML files with one profile-based `configs/config.yaml`.
+- Added config-loader profile resolution while keeping direct `AppConfig` YAML compatibility for local custom configs.
+- Updated CLI scripts to read the unified config by default and accept profile overrides for data, strategy, risk, backtest, execution, and broker selection.
+- Updated tests and documentation to use the unified config workflow.
+
 ## 2026-05-18 BrokerAdapter Architecture Refactor
 
 - Added canonical backtest order models in `qts.backtest.orders` and fill models in `qts.backtest.fills`.

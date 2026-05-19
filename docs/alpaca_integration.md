@@ -22,7 +22,7 @@ The loader also accepts the older aliases `ALPACA_API_KEY_ID` and `ALPACA_API_SE
 Use:
 
 ```bash
-python scripts/download_data.py --config configs/backtest.yaml
+python scripts/download_data.py --config configs/config.yaml
 ```
 
 The downloader normalizes Alpaca bars and writes local Parquet files.
@@ -32,13 +32,13 @@ The downloader normalizes Alpaca bars and writes local Parquet files.
 Use:
 
 ```bash
-python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-run
+python scripts/run_paper_trading.py --config configs/config.yaml --dry-run
 ```
 
-The default config uses paper mode and dry-run mode. This validates the local configuration without opening a broker connection or submitting orders. To explicitly test Alpaca connectivity with credentials configured:
+The single config file defaults to local backtesting, but `run_paper_trading.py` selects the `alpaca` data profile, `paper` risk profile, `paper` execution profile, and `alpaca_paper` broker profile. Dry-run mode validates the local configuration without opening a broker connection or submitting orders. To explicitly test Alpaca connectivity with credentials configured:
 
 ```bash
-python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-run --connect --once
+python scripts/run_paper_trading.py --config configs/config.yaml --dry-run --connect --once
 ```
 
 The broker adapter supports account, positions, cash, clock, open orders, submit order, cancel order, and order status through the same `BrokerAdapter` interface used by backtests. Dry-run mode never submits orders.

@@ -31,7 +31,7 @@ ALPACA_DATA_FEED=iex
 ## 3. Project Layout
 
 ```text
-configs/                 YAML run configurations
+configs/                 Unified YAML run configuration
 data/raw/                Local raw market data
 data/processed/          Generated processed artifacts
 docs/                    System documentation
@@ -54,66 +54,56 @@ qts.execution            Broker adapter interface and Alpaca paper/live adapter 
 qts.reporting            CSV, JSON, and chart output
 ```
 
-## 4. Configuration Files
+## 4. Configuration
 
-Backtests and paper trading are controlled by YAML files in `configs/`.
+Backtests, ML backtests, Alpaca data downloads, and paper trading are controlled by one YAML file: `configs/config.yaml`.
 
-Common sections:
+The `runtime` section chooses active defaults. Each CLI can override these profile names without needing another file:
 
 ```yaml
-mode: backtest
-data:
-  data_dir: data/raw
-  data_file: null
-  source: local
-  timeframe: 1Min
-  timezone: America/Los_Angeles
-  symbols: [SPY]
-  start: "2024-01-02"
-  end: "2024-01-05"
-strategy:
-  name: moving_average_crossover
-  parameters:
-    fast_window: 5
-    slow_window: 20
-    order_type: market
-    time_in_force: day
-risk:
-  max_gross_exposure: 1.0
-  max_portfolio_exposure: 1.0
-  max_symbol_exposure: 1.0
-  max_order_notional: 50000
-  max_position_quantity: 1000
-  max_position_qty: 1000
-  allow_short: true
-backtest:
-  initial_cash: 100000
-  slippage_bps: 2.0
-  commission_bps: 0.0
-  fixed_commission: 0.0
-  latency_bars: 1
-  latency_seconds: 0
-  market_order_fill: next_open
-  limit_fill_price: limit
-  stop_fill_price: stop
-  intrabar_price_path: open_high_low_close
-  volume_participation_limit: 0.05
-  allow_partial_fills: false
-  enforce_buying_power: true
-  max_leverage: 1.0
-  infer_annualization_periods: true
-execution:
+runtime:
   mode: backtest
-  broker: backtest
-  market_order_fill: next_open
-broker:
-  provider: alpaca
-  paper: true
-  live_trading_enabled: false
-  require_order_confirmation: true
+  data: sample_local
+  strategy: moving_average_crossover
+  risk: research
+  backtest: default
+  execution: backtest
+  broker: alpaca_paper
 ```
 
-Important assumptions such as slippage, commissions, latency, exposure limits, and starting cash should be changed in config rather than hard-coded into strategies.
+Named profiles live under `profiles`:
+
+```yaml
+profiles:
+  data:
+    sample_local: ...
+    alpaca: ...
+  strategies:
+    moving_average_crossover: ...
+    baseline_ml: ...
+  risk:
+    research: ...
+    paper: ...
+  backtest:
+    default: ...
+    ml: ...
+  execution:
+    backtest: ...
+    paper: ...
+  broker:
+    alpaca_paper: ...
+```
+
+Important assumptions such as slippage, commissions, latency, exposure limits, starting cash, and paper/live safety flags should be changed in profile entries rather than hard-coded into strategies.
+
+Examples:
+
+```bash
+python scripts/run_backtest.py --strategy-profile rsi_mean_reversion
+python scripts/run_ml_backtest.py --model models/baseline_logistic.joblib
+python scripts/download_data.py --data-profile alpaca
+python scripts/run_paper_trading.py --risk-profile paper --dry-run
+```
 
 `latency_bars` must be at least `1`. The engine assumes signals are generated after the current bar is known and orders fill no earlier than a later bar. This avoids same-bar close-to-close look-ahead behavior.
 
@@ -144,7 +134,7 @@ This writes `data/raw/sample_bars.csv` and local Parquet partitions under `data/
 The repository includes a deterministic sample CSV at `data/raw/sample_bars.csv`.
 
 ```bash
-python scripts/run_backtest.py --config configs/backtest.yaml
+python scripts/run_backtest.py --config configs/config.yaml
 ```
 
 Outputs:
@@ -164,7 +154,7 @@ reports/backtests/SPY_diagnostics.png
 Use `--no-chart` to skip chart generation:
 
 ```bash
-python scripts/run_backtest.py --config configs/backtest.yaml --no-chart
+python scripts/run_backtest.py --config configs/config.yaml --no-chart
 ```
 
 `run_metadata.json` contains the run timestamp, QTS version, full config snapshot, data source, symbol list, row count, and data start/end timestamps. Keep it with metrics and trades when comparing strategy runs.
@@ -173,17 +163,20 @@ python scripts/run_backtest.py --config configs/backtest.yaml --no-chart
 
 ## 7.1. Use a Custom Local Data File
 
-For fast research, point a config directly at a CSV or Parquet file:
+For fast research, add or edit a data profile:
 
 ```yaml
-data:
-  data_file: data/raw/my_experiment.csv
-  source: local_experiment
-  timeframe: 1Min
-  timezone: America/Los_Angeles
-  symbols: [SPY]
-  start: "2024-01-02"
-  end: "2024-01-31"
+profiles:
+  data:
+    my_experiment:
+      data_dir: data/raw
+      data_file: data/raw/my_experiment.csv
+      source: local_experiment
+      timeframe: 1Min
+      timezone: America/Los_Angeles
+      symbols: [SPY]
+      start: "2024-01-02"
+      end: "2024-01-31"
 ```
 
 The file must contain at least:
@@ -196,23 +189,25 @@ Optional columns include `trade_count`, `vwap`, `timeframe`, and `source`. When 
 
 ## 8. Download Alpaca Historical Data
 
-Set credentials in `.env`, then edit the `data` section of a config:
+Set credentials in `.env`, then edit `profiles.data.alpaca`:
 
 ```yaml
-data:
-  data_dir: data/raw
-  source: alpaca
-  timeframe: 1Min
-  symbols: [SPY, AAPL]
-  start: "2024-01-02"
-  end: "2024-01-31"
-  feed: iex
+profiles:
+  data:
+    alpaca:
+      data_dir: data/raw
+      source: alpaca
+      timeframe: 1Min
+      symbols: [SPY, AAPL]
+      start: "2024-01-02"
+      end: "2024-01-31"
+      feed: iex
 ```
 
 Run:
 
 ```bash
-python scripts/download_data.py --config configs/backtest.yaml
+python scripts/download_data.py --config configs/config.yaml
 ```
 
 Stored files use this layout:
@@ -229,7 +224,7 @@ The baseline model uses deterministic technical features and a time-based train/
 
 ```bash
 python scripts/train_model.py \
-  --config configs/backtest.yaml \
+  --config configs/config.yaml \
   --output models/baseline_logistic.joblib
 ```
 
@@ -237,7 +232,7 @@ Useful options:
 
 ```bash
 python scripts/train_model.py \
-  --config configs/backtest.yaml \
+  --config configs/config.yaml \
   --output models/baseline_logistic.joblib \
   --horizon 1 \
   --threshold 0.0 \
@@ -251,14 +246,14 @@ Do not use random train/test splits for market data research unless you have a s
 After training a model:
 
 ```bash
-python scripts/run_ml_backtest.py --config configs/ml_backtest.yaml
+python scripts/run_ml_backtest.py --config configs/config.yaml
 ```
 
 You can override the model path:
 
 ```bash
 python scripts/run_ml_backtest.py \
-  --config configs/ml_backtest.yaml \
+  --config configs/config.yaml \
   --model models/baseline_logistic.joblib
 ```
 
@@ -279,13 +274,13 @@ This provenance is preserved into order metadata and backtest trade logs for att
 Paper trading is intentionally conservative. The default config uses `dry_run: true`.
 
 ```bash
-python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-run
+python scripts/run_paper_trading.py --config configs/config.yaml --dry-run
 ```
 
 This validates paper-trading configuration without opening an Alpaca connection or submitting orders. To explicitly check Alpaca account and clock access after credentials are configured:
 
 ```bash
-python scripts/run_paper_trading.py --config configs/paper_trading.yaml --dry-run --connect --once
+python scripts/run_paper_trading.py --config configs/config.yaml --dry-run --connect --once
 ```
 
 This does not run a full autonomous trading loop yet.
@@ -453,7 +448,7 @@ Check `data_dir`, `source`, `timeframe`, and `symbols` in the config.
 If an ML backtest cannot find the model:
 
 ```bash
-python scripts/train_model.py --config configs/backtest.yaml --output models/baseline_logistic.joblib
+python scripts/train_model.py --config configs/config.yaml --output models/baseline_logistic.joblib
 ```
 
 Then rerun the ML backtest.

@@ -1,0 +1,230 @@
+# Unified configuration for local research, backtesting, Alpaca paper trading,
+# and future live trading readiness.
+#
+# Change the active profile names under runtime, or pass profile overrides from
+# CLI scripts. Backtests run locally without Alpaca credentials by default.
+runtime:
+  mode: backtest
+  data: sample_local
+  strategy: moving_average_crossover
+  risk: research
+  backtest: default
+  execution: backtest
+  broker: alpaca_paper
+
+profiles:
+  data:
+    sample_local:
+      data_dir: data/raw
+      data_file: data/raw/sample_bars.csv
+      source: local
+      timeframe: 1Min
+      timezone: America/Los_Angeles
+      symbols: [SPY]
+      start: "2024-01-02T14:30:00Z"
+      end: "2024-01-03T21:00:00Z"
+      feed: iex
+
+    alpaca:
+      data_dir: data/raw
+      data_file:
+      source: alpaca
+      timeframe: 1Min
+      timezone: America/Los_Angeles
+      symbols: [SPY]
+      start: "2024-01-02T14:30:00Z"
+      end: "2024-01-03T21:00:00Z"
+      feed: iex
+
+  strategies:
+    moving_average_crossover:
+      name: moving_average_crossover
+      parameters:
+        fast_window: 5
+        slow_window: 20
+        target_notional_fraction: 0.5
+        order_type: market
+        time_in_force: day
+        # For limit/stop experiments, use offsets from the signal bar close:
+        # limit_price_offset_bps: 5
+        # stop_price_offset_bps: 10
+
+    rsi_mean_reversion:
+      name: rsi_mean_reversion
+      parameters:
+        rsi_window: 14
+        oversold: 30
+        overbought: 70
+        target_notional_fraction: 0.5
+        order_type: market
+        time_in_force: day
+
+    breakout:
+      name: breakout
+      parameters:
+        lookback: 20
+        target_notional_fraction: 0.5
+        order_type: market
+        time_in_force: day
+
+    baseline_ml:
+      name: baseline_ml
+      parameters:
+        model_path: models/baseline_logistic.joblib
+        long_threshold: 0.55
+        short_threshold: 0.45
+        target_notional_fraction: 0.95
+        order_type: market
+        time_in_force: day
+
+  risk:
+    research:
+      max_gross_exposure: 1.0
+      max_portfolio_exposure: 1.0
+      max_symbol_exposure: 1.0
+      max_position_notional: 95000
+      max_order_notional: 50000
+      max_position_quantity: 1000
+      max_position_qty: 1000
+      max_daily_loss: 5000
+      allow_short: true
+      kill_switch: false
+      trading_session_start: "06:30"
+      trading_session_end: "13:00"
+
+    paper:
+      max_gross_exposure: 0.5
+      max_portfolio_exposure: 0.5
+      max_symbol_exposure: 0.25
+      max_position_notional: 25000
+      max_order_notional: 10000
+      max_position_quantity: 100
+      max_position_qty: 100
+      max_daily_loss: 1000
+      allow_short: false
+      kill_switch: false
+      trading_session_start: "06:30"
+      trading_session_end: "13:00"
+
+    live_disabled:
+      max_gross_exposure: 0.25
+      max_portfolio_exposure: 0.25
+      max_symbol_exposure: 0.10
+      max_position_notional: 10000
+      max_order_notional: 2500
+      max_position_quantity: 50
+      max_position_qty: 50
+      max_daily_loss: 500
+      allow_short: false
+      kill_switch: true
+      trading_session_start: "06:30"
+      trading_session_end: "13:00"
+
+  backtest:
+    default:
+      initial_cash: 100000
+      commission_per_share: 0.0
+      commission_bps: 0.0
+      fixed_commission: 0.0
+      slippage_bps: 2.0
+      latency_bars: 1
+      latency_seconds: 0
+      market_order_fill: next_open
+      limit_fill_price: limit
+      stop_fill_price: stop
+      intrabar_price_path: open_high_low_close
+      volume_participation_limit: 0.05
+      allow_partial_fills: false
+      enforce_buying_power: true
+      max_leverage: 1.0
+      annualization_periods: 252
+      infer_annualization_periods: true
+      output_dir: reports/backtests
+
+    ml:
+      initial_cash: 100000
+      commission_per_share: 0.0
+      commission_bps: 0.0
+      fixed_commission: 0.0
+      slippage_bps: 2.0
+      latency_bars: 1
+      latency_seconds: 0
+      market_order_fill: next_open
+      limit_fill_price: limit
+      stop_fill_price: stop
+      intrabar_price_path: open_high_low_close
+      volume_participation_limit: 0.05
+      allow_partial_fills: false
+      enforce_buying_power: true
+      max_leverage: 1.0
+      annualization_periods: 252
+      infer_annualization_periods: true
+      output_dir: reports/ml_backtests
+
+  execution:
+    backtest:
+      mode: backtest
+      broker: backtest
+      market_order_fill: next_open
+      slippage_bps: 2.0
+      commission_bps: 0.0
+      fixed_commission: 0.0
+      latency_bars: 1
+      latency_seconds: 0
+      allow_partial_fills: false
+      volume_participation_limit: 0.05
+      paper: true
+      dry_run: true
+      live_trading_enabled: false
+      require_order_confirmation: true
+      order_confirmation_required: true
+      poll_interval_seconds: 5
+
+    paper:
+      mode: paper
+      broker: alpaca
+      market_order_fill: next_open
+      slippage_bps: 2.0
+      commission_bps: 0.0
+      fixed_commission: 0.0
+      latency_bars: 1
+      latency_seconds: 0
+      allow_partial_fills: false
+      volume_participation_limit: 0.05
+      paper: true
+      dry_run: true
+      live_trading_enabled: false
+      require_order_confirmation: true
+      order_confirmation_required: true
+      poll_interval_seconds: 5
+
+    live_disabled:
+      mode: live
+      broker: alpaca
+      market_order_fill: next_open
+      slippage_bps: 2.0
+      commission_bps: 0.0
+      fixed_commission: 0.0
+      latency_bars: 1
+      latency_seconds: 0
+      allow_partial_fills: false
+      volume_participation_limit: 0.05
+      paper: false
+      dry_run: true
+      live_trading_enabled: false
+      require_order_confirmation: true
+      order_confirmation_required: true
+      poll_interval_seconds: 5
+
+  broker:
+    alpaca_paper:
+      provider: alpaca
+      paper: true
+      live_trading_enabled: false
+      require_order_confirmation: true
+
+    alpaca_live_disabled:
+      provider: alpaca
+      paper: false
+      live_trading_enabled: false
+      require_order_confirmation: true

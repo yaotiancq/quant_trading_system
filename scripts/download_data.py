@@ -11,12 +11,13 @@ from qts.utils.logging import configure_logging, get_logger
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Download historical bars from Alpaca into local Parquet storage.")
-    parser.add_argument("--config", default="configs/backtest.yaml")
+    parser.add_argument("--config", default="configs/config.yaml")
+    parser.add_argument("--data-profile", default="alpaca")
     args = parser.parse_args()
 
     configure_logging()
     logger = get_logger(__name__)
-    config = load_app_config(args.config)
+    config = load_app_config(args.config, profile_overrides={"mode": "research", "data": args.data_profile})
     settings = load_env_settings()
     if not config.data.start or not config.data.end:
         raise ValueError("Data start and end dates are required for Alpaca downloads.")
@@ -32,4 +33,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

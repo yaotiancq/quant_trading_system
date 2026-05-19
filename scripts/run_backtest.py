@@ -14,13 +14,30 @@ from qts.utils.logging import configure_logging, get_logger
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run a bar-by-bar backtest.")
-    parser.add_argument("--config", default="configs/backtest.yaml")
+    parser.add_argument("--config", default="configs/config.yaml")
+    parser.add_argument("--data-profile", default=None)
+    parser.add_argument("--strategy-profile", default=None)
+    parser.add_argument("--risk-profile", default=None)
+    parser.add_argument("--backtest-profile", default=None)
+    parser.add_argument("--execution-profile", default=None)
+    parser.add_argument("--broker-profile", default=None)
     parser.add_argument("--no-chart", action="store_true")
     args = parser.parse_args()
 
     configure_logging()
     logger = get_logger(__name__)
-    config = load_app_config(args.config)
+    config = load_app_config(
+        args.config,
+        profile_overrides={
+            "mode": "backtest",
+            "data": args.data_profile,
+            "strategy": args.strategy_profile,
+            "risk": args.risk_profile,
+            "backtest": args.backtest_profile,
+            "execution": args.execution_profile,
+            "broker": args.broker_profile,
+        },
+    )
     data = load_market_data(config.data)
     strategy = create_strategy_from_config(config.strategy)
     engine = BacktestEngine(config.backtest, strategy, RiskManager(config.risk))
